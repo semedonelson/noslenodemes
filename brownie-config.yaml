@@ -1,0 +1,66 @@
+dotenv: .env
+networks:
+  default: mainnet-fork
+  development:
+    keyhash: '0x2ed0feb3e7fd2022120aa84fab1945545a9f2ffc9076fd6156fa96eaff4c1311'
+  kovan:
+    vrf_coordinator: '0xb3dCcb4Cf7a26f6cf6B120Cf5A73875B7BBc655B'
+  mainnet-fork:
+    eth_usd_price_feed: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419'
+wallets:
+  from_key: ${PRIVATE_KEY}
+dex:
+  uniswap_v2:
+    factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
+    router: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+    default_token: "WETH"
+    use_graph: True
+    is_master: True
+    graph_url: "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2"
+    graph_query: "query pairs {
+      pairs(first: @size, orderBy: id, orderDirection: asc, where: {id_gt: \"@id\"}) {
+        id
+        token0 {
+          id
+          symbol
+          name
+          decimals
+        }
+        token1 {
+          id
+          name
+          symbol
+          decimals
+        }
+      }
+    }"
+  sushiswap:
+    factory: "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac"
+    router: "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F"
+    default_token: "WETH"
+    use_graph: True
+    is_master: False
+    graph_url: "https://api.thegraph.com/subgraphs/name/zippoxer/sushiswap-subgraph-fork"
+    graph_query: "query pairs {
+      pairs(first: @size, orderBy: id, orderDirection: asc, where: {id_gt: \"@id\"}) {
+        id
+        token0 {
+          id
+          symbol
+          name
+          decimals
+        }
+        token1 {
+          id
+          name
+          symbol
+          decimals
+        }
+      }
+    }"   
+  uniswap_v3:
+    factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984"
+    router: "0xE592427A0AEce92De3Edee1F18E0157C05861564"
+    default_token: "WETH"
+    use_graph: False
+    is_master: False     
