@@ -4,8 +4,9 @@ from scripts.helpful_scripts import (
     get_token,
     list_of_tokens,
     get_account,
+    get_dex_info,
 )
-from scripts.classes import token, ObjectEncoder, dex_pair
+from scripts.classes import token, ObjectEncoder, dex_pair_info
 import json
 from json import JSONEncoder
 from brownie import ChainWatcher
@@ -33,6 +34,9 @@ def check_pairs(_factory, _token0, _token1):
 
 
 def main1():
+    d_p = dex_pair("NAME", "2323", "ssdsd", "")
+    print(d_p.dex_name)
+    """
     account = get_account()
     watcher = deploy_watcher()
     address = watcher.validate_pair(
@@ -49,6 +53,7 @@ def main1():
         {"from": account},
     )
     print(f"check_pairs {address}")
+    """
 
 
 def main():
@@ -66,7 +71,7 @@ def main():
         for pair in dx.pairs:
             dx_pair_token0_id = pair["token0"]["id"]
             dx_pair_token1_id = pair["token1"]["id"]
-            d_p = dex_pair(dx.name, pair["id"], pair["token0"], pair["token1"])
+            d_p = dex_pair_info(dx.name, pair["id"], pair["token0"], pair["token1"])
             tmp_dex_pairs_list = []
             tmp_dex_pairs_list.append(d_p)
             for dx_p in dex_info:
@@ -78,7 +83,7 @@ def main():
                             dx_pair_token0_id == dx_p_pair_m_token0_id
                             and dx_pair_token1_id == dx_p_pair_m_token1_id
                         ):
-                            d_p = dex_pair(
+                            d_p = dex_pair_info(
                                 dx_p.name,
                                 pair_m["id"],
                                 pair_m["token0"],
@@ -88,6 +93,26 @@ def main():
                             break
             if len(tmp_dex_pairs_list) > 1:
                 final_dex_pairs_list.append(tmp_dex_pairs_list)
+    # check
+    for lst in final_dex_pairs_list:
+        for index, dex_p in enumerate(lst):
+            if index + 1 < len(lst) and index >= 0:
+                curr_item = dex_p
+                next_item = lst[index + 1]
+                dex0_name = curr_item.dex_name
+                dex1_name = next_item.dex_name
+                dex0_factory, dex0_router = get_dex_info(dex_info, curr_item.dex_name)
+                pair0_id = curr_item.pair_id
+                dex1_factory, dex1_router = get_dex_info(dex_info, next_item.dex_name)
+                pair1_id = next_item.pair_id
+                token0 = curr_item.token0["id"]
+                token1 = curr_item.token1["id"]
+                token0_decimals = curr_item.token0["decimals"]
+                token1_decimals = curr_item.token1["decimals"]
+                print(
+                    f"dex0_name: {dex0_name} dex1_name: {dex1_name} dex0_factory: {dex0_factory} dex0_router: {dex0_router} dex1_factory: {dex1_factory} dex1_router: {dex1_router} pair0_id: {pair0_id} pair1_id: {pair1_id} token0: {token0} token1: {token0} token0_decimals: {token0_decimals} token1_decimals: {token1_decimals}"
+                )
+    """
     for lst in final_dex_pairs_list:
         for pair in lst:
             dx_name = pair.dex_name
@@ -98,6 +123,7 @@ def main():
                 f"dx: {dx_name} pair: {pair_id} token0: {token0_id} token1: {token1_id}"
             )
         print("################################################")
+    """
     # https://www.geeksforgeeks.org/python-remove-all-values-from-a-list-present-in-other-list/
     # check pair for non graph dex
 

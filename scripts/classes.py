@@ -30,10 +30,19 @@ class token:
 
 
 class token0:
-    def __init__(self, id, name, symbol):
+    def __init__(self, id, name, symbol, decimals):
         self.id = id
         self.name = name
         self.symbol = symbol
+        self.decimals = decimals
+
+
+class token1:
+    def __init__(self, id, name, symbol, decimals):
+        self.id = id
+        self.name = name
+        self.symbol = symbol
+        self.decimals = decimals
 
 
 class pair:
@@ -48,14 +57,7 @@ class pair:
         self.token1 = token1
 
 
-class token1:
-    def __init__(self, id, name, symbol):
-        self.id = id
-        self.name = name
-        self.symbol = symbol
-
-
-class dex_pair:
+class dex_pair_info:
     def __init__(self, dex_name, pair_id, token0, token1):
         self.dex_name = dex_name
         self.pair_id = pair_id

@@ -93,7 +93,11 @@ def get_dex_data():
             dexs.append(d)
     return dexs
 
-    # var = '{foo} {foo} {foo}'.format(foo = 'python you so crazy')
+
+def get_dex_info(dex_list, dex_name):
+    for dex in dex_list:
+        if dex.name == dex_name:
+            return dex.factory, dex.router
 
 
 def get_token(pairs, symbol):
