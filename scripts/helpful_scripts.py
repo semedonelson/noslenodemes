@@ -7,6 +7,8 @@ from json import JSONEncoder
 import time
 
 REQUEST_SIZE = 1000
+FORKED_LOCAL_ENVIRONMENTS = ["mainnet-fork", "mainnet-fork-dev"]
+LOCAL_BLOCKCHAIN_ENVIRONMENTS = ["development", "ganache-local"]
 
 
 def read_chainlink_data():
@@ -114,3 +116,19 @@ def list_of_tokens(oracle_info):
         if oracle["pair1"] not in tokens:
             tokens.append(oracle["pair1"])
     return tokens
+
+
+def get_account(index=None, id=None):
+    # accounts[0]
+    # accounts.add("env")
+    # accounts.load("id")
+    if index:
+        return accounts[index]
+    if id:
+        return accounts.load(id)
+    if (
+        network.show_active() in LOCAL_BLOCKCHAIN_ENVIRONMENTS
+        or network.show_active() in FORKED_LOCAL_ENVIRONMENTS
+    ):
+        return accounts[0]
+    return accounts.add(config["wallets"]["from_key"])

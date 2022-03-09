@@ -40,4 +40,12 @@ contract ChainWatcher {
             amountOut // the amount we get from our input "_amountTokenPay"; example: BUSD amount
         );
     }
+
+    function validate_pair(
+        address factory,
+        address token0,
+        address token1
+    ) public view returns (address) {
+        return IUniswapV2Factory(factory).getPair(token0, token1);
+    }
 }

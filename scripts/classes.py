@@ -55,6 +55,14 @@ class token1:
         self.symbol = symbol
 
 
+class dex_pair:
+    def __init__(self, dex_name, pair_id, token0, token1):
+        self.dex_name = dex_name
+        self.pair_id = pair_id
+        self.token0 = token0
+        self.token1 = token1
+
+
 class ObjectEncoder(JSONEncoder):
     def default(self, obj):
         return obj.__dict__

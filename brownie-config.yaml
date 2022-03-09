@@ -58,9 +58,3 @@ dex:
         }
       }
     }"   
-  uniswap_v3:
-    factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984"
-    router: "0xE592427A0AEce92De3Edee1F18E0157C05861564"
-    default_token: "WETH"
-    use_graph: False
-    is_master: False     
