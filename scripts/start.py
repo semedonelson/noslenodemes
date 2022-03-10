@@ -18,7 +18,7 @@ def deploy_watcher():
         {"from": account},
     )
     print("Deployed Chain Watcher!")
-    return watcher
+    return watcher, account
 
 
 def check_pairs(_factory, _token0, _token1):
@@ -90,7 +90,7 @@ def main1():
 
 
 def main():
-    watcher = deploy_watcher()
+    watcher, account = deploy_watcher()
     dex_info = get_dex_data()
     for d in dex_info:
         size = len(d.pairs)
@@ -117,11 +117,41 @@ def main():
                 token1 = curr_item.token1["id"]
                 token0_decimals = curr_item.token0["decimals"]
                 token1_decimals = curr_item.token1["decimals"]
+                amountTokenPay = 10 ** int(token1_decimals)
                 print(
-                    f"dex0_name: {dex0_name} dex1_name: {dex1_name} dex0_factory: {dex0_factory} dex0_router: {dex0_router} dex1_factory: {dex1_factory} dex1_router: {dex1_router} pair0_id: {pair0_id} pair1_id: {pair1_id} token0: {token0} token1: {token0} token0_decimals: {token0_decimals} token1_decimals: {token1_decimals}"
+                    f"amountTokenPay: {amountTokenPay}  token1_decimals: {token1_decimals}"
                 )
+                try:
+                    profit, amountOut = watcher.check(
+                        token0,
+                        amountTokenPay,
+                        token1,
+                        dex0_router,
+                        dex1_router,
+                        {"from": account},
+                    )
+                    print(f"pair1_id: {pair1_id} profit: {profit}")
+                except:
+                    print("error")
+                amountTokenPay = 10 ** int(token0_decimals)
+                print(
+                    f"amountTokenPay: {amountTokenPay}  token0_decimals: {token0_decimals}"
+                )
+                try:
+                    profit, amountOut = watcher.check(
+                        token1,
+                        amountTokenPay,
+                        token0,
+                        dex1_router,
+                        dex0_router,
+                        {"from": account},
+                    )
+                    print(f"pair1_id: {pair1_id} profit: {profit}")
+                except:
+                    print("error")
 
 
+# erro: UniswapV2Library: INSUFFICIENT_INPUT_AMOUNT - https://github.com/Uniswap/v2-periphery/blob/master/contracts/libraries/UniswapV2Library.sol
 # https://www.geeksforgeeks.org/python-remove-all-values-from-a-list-present-in-other-list/
 # check pair for non graph dex
 
