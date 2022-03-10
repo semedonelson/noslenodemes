@@ -33,37 +33,7 @@ def check_pairs(_factory, _token0, _token1):
     return address
 
 
-def main1():
-    d_p = dex_pair("NAME", "2323", "ssdsd", "")
-    print(d_p.dex_name)
-    """
-    account = get_account()
-    watcher = deploy_watcher()
-    address = watcher.validate_pair(
-        "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac",
-        "0x4d44d6c288b7f32ff676a4b2dafd625992f8ffbd",
-        "0xdac17f958d2ee523a2206206994597c13d831ec7",
-        {"from": account},
-    )
-    print(f"check_pairs {address}")
-    address = watcher.validate_pair(
-        "0x1F98431c8aD98523631AE4a59f267346ea31F984",
-        "0x4d44d6c288b7f32ff676a4b2dafd625992f8ffbd",
-        "0xdac17f958d2ee523a2206206994597c13d831ec7",
-        {"from": account},
-    )
-    print(f"check_pairs {address}")
-    """
-
-
-def main():
-    deploy_watcher()
-    dex_info = get_dex_data()
-    for d in dex_info:
-        size = len(d.pairs)
-        print(
-            f"dex name: {d.name} factory: {d.factory} router: {d.router} default_token: {d.default_token} pairs: {size} graph: {d.use_graph}"
-        )
+def get_dex_pairs_list(dex_info):
     dx_processed = []
     final_dex_pairs_list = []
     for dx in dex_info:
@@ -93,7 +63,45 @@ def main():
                             break
             if len(tmp_dex_pairs_list) > 1:
                 final_dex_pairs_list.append(tmp_dex_pairs_list)
+    return final_dex_pairs_list
+
+
+def main1():
+    d_p = dex_pair("NAME", "2323", "ssdsd", "")
+    print(d_p.dex_name)
+    """
+    account = get_account()
+    watcher = deploy_watcher()
+    address = watcher.validate_pair(
+        "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac",
+        "0x4d44d6c288b7f32ff676a4b2dafd625992f8ffbd",
+        "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        {"from": account},
+    )
+    print(f"check_pairs {address}")
+    address = watcher.validate_pair(
+        "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        "0x4d44d6c288b7f32ff676a4b2dafd625992f8ffbd",
+        "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        {"from": account},
+    )
+    print(f"check_pairs {address}")
+    """
+
+
+def main():
+    watcher = deploy_watcher()
+    dex_info = get_dex_data()
+    for d in dex_info:
+        size = len(d.pairs)
+        print(
+            f"dex name: {d.name} factory: {d.factory} router: {d.router} default_token: {d.default_token} pairs: {size} graph: {d.use_graph}"
+        )
+    # Multiprocessing a for loop
+    # https://stackoverflow.com/a/20192251
+    # https://docs.python.org/3/library/itertools.html
     # check
+    final_dex_pairs_list = get_dex_pairs_list(dex_info)
     for lst in final_dex_pairs_list:
         for index, dex_p in enumerate(lst):
             if index + 1 < len(lst) and index >= 0:
@@ -112,20 +120,10 @@ def main():
                 print(
                     f"dex0_name: {dex0_name} dex1_name: {dex1_name} dex0_factory: {dex0_factory} dex0_router: {dex0_router} dex1_factory: {dex1_factory} dex1_router: {dex1_router} pair0_id: {pair0_id} pair1_id: {pair1_id} token0: {token0} token1: {token0} token0_decimals: {token0_decimals} token1_decimals: {token1_decimals}"
                 )
-    """
-    for lst in final_dex_pairs_list:
-        for pair in lst:
-            dx_name = pair.dex_name
-            pair_id = pair.pair_id
-            token0_id = pair.token0["id"]
-            token1_id = pair.token1["id"]
-            print(
-                f"dx: {dx_name} pair: {pair_id} token0: {token0_id} token1: {token1_id}"
-            )
-        print("################################################")
-    """
-    # https://www.geeksforgeeks.org/python-remove-all-values-from-a-list-present-in-other-list/
-    # check pair for non graph dex
+
+
+# https://www.geeksforgeeks.org/python-remove-all-values-from-a-list-present-in-other-list/
+# check pair for non graph dex
 
 
 # https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol
