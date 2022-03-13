@@ -35,7 +35,13 @@ def get_dex_pairs_list(dex_info):
         for pair in dx.pairs:
             dx_pair_token0_id = pair["token0"]["id"]
             dx_pair_token1_id = pair["token1"]["id"]
-            d_p = dex_pair_info(dx.name, pair["id"], pair["token0"], pair["token1"])
+            d_p = dex_pair_info(
+                dx.name,
+                pair["id"],
+                pair["dailyVolumeUSD"],
+                pair["token0"],
+                pair["token1"],
+            )
             tmp_dex_pairs_list = []
             tmp_dex_pairs_list.append(d_p)
             for dx_p in dex_info:
@@ -50,6 +56,7 @@ def get_dex_pairs_list(dex_info):
                             d_p = dex_pair_info(
                                 dx_p.name,
                                 pair_m["id"],
+                                pair_m["dailyVolumeUSD"],
                                 pair_m["token0"],
                                 pair_m["token1"],
                             )
@@ -57,6 +64,9 @@ def get_dex_pairs_list(dex_info):
                             break
             if len(tmp_dex_pairs_list) > 1:
                 final_dex_pairs_list.append(tmp_dex_pairs_list)
+    final_dex_pairs_list.sort(
+        key=lambda x: sum(p.dailyVolumeUSD for p in x), reverse=True
+    )
     return final_dex_pairs_list
 
 
@@ -89,28 +99,36 @@ def dex_info_processor(watcher, account, dex_info):
                 routers = []
                 routers.append(dex0_router)
                 routers.append(dex1_router)
+                pairs = []
+                pairs.append(pair0_id)
+                pairs.append(pair1_id)
                 # try:
-                """
-                print(
-                    f"token0: {tokens[0]} token1: {tokens[1]} amount0: {amounts[0]} amount1: {amounts[1]} router0: {routers[0]} router1: {routers[1]}"
-                )
-                """
-                profit, amountOut, result = watcher.validate(
+                profit, amountOut, result, balance0, balance1 = watcher.validate(
                     tokens,
                     amounts,
                     routers,
+                    pairs,
                     {"from": account},
                 )
                 if profit > 0:
                     print(
-                        f"profit: {profit} amountOut: {amountOut} token0: {result[0]} token1: {result[1]}"
+                        f"profit: {profit} amountOut: {amountOut} token0: {result[0]} token1: {result[1]} balance0 0: {balance0[0]} balance0 1: {balance0[1]} balance1 0: {balance1[0]} balance1 1: {balance1[1]}"
                     )
                 # except:
                 #    print("Oops!", sys.exc_info()[0], "occurred.")
     print("Finished processing pairs!")
 
 
-def main():
+def main1():
+    # test
+    """
+    https://stackoverflow.com/a/12032202
+    import itertools
+
+    for a,b,c in itertools.product(cc1, cc2, cc3):
+        print a,b,c
+    """
+    """
     cidades = []
     pt_cid = []
     c1 = cidade("lisboa", 1000)
@@ -137,6 +155,7 @@ def main():
         for c in list:
             print(f"nome: {c.nome} habitantes: {c.habitantes}")
     """
+    """
     tokens = []
     tokens.append("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
     tokens.append("0xdac17f958d2ee523a2206206994597c13d831ec7")
@@ -160,7 +179,7 @@ def main():
     """
 
 
-def main1():
+def main():
     watcher, account = deploy_watcher()
     dex_info = get_dex_data()
     for d in dex_info:

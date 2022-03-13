@@ -59,15 +59,18 @@ class pair:
         self.token0 = token0
         self.token1 = token1
 
+
 class cidade:
     def __init__(self, nome, habitantes):
         self.nome = nome
         self.habitantes = habitantes
 
+
 class dex_pair_info:
-    def __init__(self, dex_name, pair_id, token0, token1):
+    def __init__(self, dex_name, pair_id, dailyVolumeUSD, token0, token1):
         self.dex_name = dex_name
         self.pair_id = pair_id
+        self.dailyVolumeUSD = dailyVolumeUSD
         self.token0 = token0
         self.token1 = token1
 

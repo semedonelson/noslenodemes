@@ -18,7 +18,8 @@ contract ChainWatcher is Ownable {
     function validate(
         address[] memory tokens,
         uint256[] memory amounts,
-        address[] memory routers
+        address[] memory routers,
+        address[] memory pairs
     )
         public
         view
@@ -26,10 +27,14 @@ contract ChainWatcher is Ownable {
         returns (
             int256 profit,
             uint256 amount,
-            address[] memory result
+            address[] memory result,
+            uint256[] memory balance0,
+            uint256[] memory balance1
         )
     {
         result = new address[](2);
+        balance0 = new uint256[](2);
+        balance1 = new uint256[](2);
         profit = 0;
         amount = 0;
         (profit, amount) = check(
@@ -42,6 +47,10 @@ contract ChainWatcher is Ownable {
         if (profit > 0) {
             result[0] = tokens[0];
             result[1] = tokens[1];
+            balance0[0] = IERC20(tokens[0]).balanceOf(pairs[0]);
+            balance0[1] = IERC20(tokens[1]).balanceOf(pairs[0]);
+            balance1[0] = IERC20(tokens[0]).balanceOf(pairs[1]);
+            balance1[1] = IERC20(tokens[1]).balanceOf(pairs[1]);
         } else {
             (profit, amount) = check(
                 tokens[1],
@@ -53,6 +62,10 @@ contract ChainWatcher is Ownable {
             if (profit > 0) {
                 result[1] = tokens[0];
                 result[0] = tokens[1];
+                balance0[0] = IERC20(tokens[1]).balanceOf(pairs[0]);
+                balance0[1] = IERC20(tokens[0]).balanceOf(pairs[0]);
+                balance1[0] = IERC20(tokens[1]).balanceOf(pairs[1]);
+                balance1[1] = IERC20(tokens[0]).balanceOf(pairs[1]);
             }
         }
     }
