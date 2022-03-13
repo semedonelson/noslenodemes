@@ -5,6 +5,10 @@ import csv
 import json
 from json import JSONEncoder
 import time
+from datetime import date
+from datetime import datetime
+from datetime import timedelta
+from decimal import Decimal
 
 REQUEST_SIZE = 1000
 FORKED_LOCAL_ENVIRONMENTS = ["mainnet-fork", "mainnet-fork-dev"]
@@ -31,7 +35,7 @@ def read_chainlink_data():
 
 
 def get_dex_data():
-    print("Starting get DEX data ....")
+    print("Starting get DEX data ...")
     dexs = []
     for dex_name in config["dex"]:
         print(f"Getting {dex_name} data ...")
@@ -56,7 +60,9 @@ def get_dex_data():
                     my_data = my_dt["data"]
                     pairs = my_data["pairs"]
                     return_records = len(pairs)
+                    # add pair to the list
                     for pair in pairs:
+                        pair["dailyVolumeUSD"] = 0
                         dex_pairs.append(pair)
                     id = pairs[-1]["id"]
                 else:
@@ -64,6 +70,11 @@ def get_dex_data():
                         f"error request data to graph. dex: {dex_name} # url {url} # {query} # response: {my_dt}"
                     )
                     time.sleep(2)
+
+            # get dailyVolumeUSD (last 24h)
+            dex_pairs = pair_daily_Volume(dex_name, dex_pairs)
+            # order pairs by dailyVolumeUSD
+            dex_pairs.sort(key=lambda x: Decimal(x["dailyVolumeUSD"]), reverse=True)
             json_string = json.dumps(
                 dex_pairs, indent=4, sort_keys=True, cls=ObjectEncoder
             )
@@ -92,6 +103,50 @@ def get_dex_data():
             )
             dexs.append(d)
     return dexs
+
+
+def pair_daily_Volume(dex_name, pairs):
+    print(f"Getting {dex_name} daily volume information ...")
+    date_time = date.today() - timedelta(days=1)
+    unix_time = int(time.mktime(date_time.timetuple()))
+    url = config["dex"][dex_name]["graph_url"]
+    return_records = REQUEST_SIZE
+    skip = 0
+    dailyVolumeInfo = []
+
+    while return_records == REQUEST_SIZE:
+        query = config["dex"][dex_name]["graph_daily_Volume_query"]
+        query = query.replace("@size", str(REQUEST_SIZE))
+        query = query.replace("@skip", str(skip))
+        query = query.replace("@time", str(unix_time))
+        my_dt = run_query_post(query, url)
+        if "data" in my_dt:
+            my_data = my_dt["data"]
+            pairDayDatas = my_data["pairDayDatas"]
+            return_records = len(pairDayDatas)
+            skip = skip + return_records
+            for p_d in pairDayDatas:
+                dailyVolumeInfo.append(p_d)
+            if skip > 5000:
+                break
+
+    total = len(dailyVolumeInfo)
+    print(f"{dex_name} total pairs traded in last 24h: {total}")
+
+    for pair in pairs:
+        volume = get_volume_info_data(dailyVolumeInfo, pair["id"])
+        if volume != None:
+            pair["dailyVolumeUSD"] = Decimal(pair["dailyVolumeUSD"]) + Decimal(volume)
+
+    return pairs
+
+
+def get_volume_info_data(info_list, pair_address):
+    try:
+        info = next(x for x in info_list if x["pairAddress"] == pair_address)
+        return info["dailyVolumeUSD"]
+    except:
+        pass
 
 
 def get_dex_info(dex_list, dex_name):

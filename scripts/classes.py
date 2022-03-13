@@ -1,5 +1,6 @@
 import json
 from json import JSONEncoder
+import decimal
 
 
 class oracle_data:
@@ -49,13 +50,19 @@ class pair:
     def __init__(
         self,
         id,
+        dailyVolumeUSD,
         token0,
         token1,
     ):
         self.id = id
+        self.dailyVolumeUSD = dailyVolumeUSD
         self.token0 = token0
         self.token1 = token1
 
+class cidade:
+    def __init__(self, nome, habitantes):
+        self.nome = nome
+        self.habitantes = habitantes
 
 class dex_pair_info:
     def __init__(self, dex_name, pair_id, token0, token1):
@@ -65,6 +72,16 @@ class dex_pair_info:
         self.token1 = token1
 
 
+class fakefloat(float):
+    def __init__(self, value):
+        self._value = value
+
+    def __repr__(self):
+        return str(self._value)
+
+
 class ObjectEncoder(JSONEncoder):
     def default(self, obj):
+        if isinstance(obj, decimal.Decimal):
+            return fakefloat(obj)
         return obj.__dict__

@@ -1,3 +1,9 @@
+dependencies:
+  - OpenZeppelin/openzeppelin-contracts@3.4.0
+compiler:
+  solc:
+    remappings:
+      - '@openzeppelin=OpenZeppelin/openzeppelin-contracts@3.4.0'
 dotenv: .env
 networks:
   default: mainnet-fork
@@ -18,7 +24,7 @@ dex:
     is_master: True
     graph_url: "https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v2"
     graph_query: "query pairs {
-      pairs(first: @size, orderBy: id, orderDirection: asc, where: {id_gt: \"@id\"}) {
+      pairs(first: @size, orderBy: id, orderDirection: asc, where: {id_gt: \"@id\" reserve0_gt: 0, reserve1_gt: 0}) {
         id
         token0 {
           id
@@ -34,6 +40,18 @@ dex:
         }
       }
     }"
+    graph_daily_Volume_query: "{
+      pairDayDatas(
+        first: @size
+        skip: @skip
+        orderBy: dailyVolumeUSD
+        orderDirection: desc
+        where: {date_gte: @time, dailyVolumeUSD_gt: 0}
+      ) {
+        dailyVolumeUSD
+        pairAddress
+      }
+    }"   
   sushiswap:
     factory: "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac"
     router: "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F"
@@ -42,7 +60,7 @@ dex:
     is_master: False
     graph_url: "https://api.thegraph.com/subgraphs/name/zippoxer/sushiswap-subgraph-fork"
     graph_query: "query pairs {
-      pairs(first: @size, orderBy: id, orderDirection: asc, where: {id_gt: \"@id\"}) {
+      pairs(first: @size, orderBy: id, orderDirection: asc, where: {id_gt: \"@id\" reserve0_gt: 0, reserve1_gt: 0}) {
         id
         token0 {
           id
@@ -57,4 +75,16 @@ dex:
           decimals
         }
       }
-    }"   
+    }"
+    graph_daily_Volume_query: "{
+      pairDayDatas(
+        first: @size
+        skip: @skip
+        orderBy: dailyVolumeUSD
+        orderDirection: desc
+        where: {date_gte: @time, dailyVolumeUSD_gt: 0}
+      ) {
+        dailyVolumeUSD
+        pairAddress
+      }
+    }"

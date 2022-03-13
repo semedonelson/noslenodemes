@@ -6,10 +6,16 @@ from scripts.helpful_scripts import (
     get_account,
     get_dex_info,
 )
-from scripts.classes import token, ObjectEncoder, dex_pair_info
+from scripts.classes import token, ObjectEncoder, dex_pair_info, cidade
 import json
 from json import JSONEncoder
 from brownie import ChainWatcher
+import sys
+
+import time
+from datetime import date
+from datetime import datetime
+from datetime import timedelta
 
 
 def deploy_watcher():
@@ -19,18 +25,6 @@ def deploy_watcher():
     )
     print("Deployed Chain Watcher!")
     return watcher, account
-
-
-def check_pairs(_factory, _token0, _token1):
-    account = get_account()
-    watcher = ChainWatcher[-1]
-    address = watcher.validate_pair(
-        _factory,
-        _token0,
-        _token1,
-        {"from": account},
-    )
-    return address
 
 
 def get_dex_pairs_list(dex_info):
@@ -66,41 +60,8 @@ def get_dex_pairs_list(dex_info):
     return final_dex_pairs_list
 
 
-def main1():
-    d_p = dex_pair("NAME", "2323", "ssdsd", "")
-    print(d_p.dex_name)
-    """
-    account = get_account()
-    watcher = deploy_watcher()
-    address = watcher.validate_pair(
-        "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac",
-        "0x4d44d6c288b7f32ff676a4b2dafd625992f8ffbd",
-        "0xdac17f958d2ee523a2206206994597c13d831ec7",
-        {"from": account},
-    )
-    print(f"check_pairs {address}")
-    address = watcher.validate_pair(
-        "0x1F98431c8aD98523631AE4a59f267346ea31F984",
-        "0x4d44d6c288b7f32ff676a4b2dafd625992f8ffbd",
-        "0xdac17f958d2ee523a2206206994597c13d831ec7",
-        {"from": account},
-    )
-    print(f"check_pairs {address}")
-    """
-
-
-def main():
-    watcher, account = deploy_watcher()
-    dex_info = get_dex_data()
-    for d in dex_info:
-        size = len(d.pairs)
-        print(
-            f"dex name: {d.name} factory: {d.factory} router: {d.router} default_token: {d.default_token} pairs: {size} graph: {d.use_graph}"
-        )
-    # Multiprocessing a for loop
-    # https://stackoverflow.com/a/20192251
-    # https://docs.python.org/3/library/itertools.html
-    # check
+def dex_info_processor(watcher, account, dex_info):
+    print("Processing pairs ....")
     final_dex_pairs_list = get_dex_pairs_list(dex_info)
     for lst in final_dex_pairs_list:
         for index, dex_p in enumerate(lst):
@@ -117,38 +78,101 @@ def main():
                 token1 = curr_item.token1["id"]
                 token0_decimals = curr_item.token0["decimals"]
                 token1_decimals = curr_item.token1["decimals"]
-                amountTokenPay = 10 ** int(token1_decimals)
+                amount0 = 10 ** int(token0_decimals)
+                amount1 = 10 ** int(token1_decimals)
+                tokens = []
+                tokens.append(token0)
+                tokens.append(token1)
+                amounts = []
+                amounts.append(amount0)
+                amounts.append(amount1)
+                routers = []
+                routers.append(dex0_router)
+                routers.append(dex1_router)
+                # try:
+                """
                 print(
-                    f"amountTokenPay: {amountTokenPay}  token1_decimals: {token1_decimals}"
+                    f"token0: {tokens[0]} token1: {tokens[1]} amount0: {amounts[0]} amount1: {amounts[1]} router0: {routers[0]} router1: {routers[1]}"
                 )
-                try:
-                    profit, amountOut = watcher.check(
-                        token0,
-                        amountTokenPay,
-                        token1,
-                        dex0_router,
-                        dex1_router,
-                        {"from": account},
-                    )
-                    print(f"pair1_id: {pair1_id} profit: {profit}")
-                except:
-                    print("error")
-                amountTokenPay = 10 ** int(token0_decimals)
-                print(
-                    f"amountTokenPay: {amountTokenPay}  token0_decimals: {token0_decimals}"
+                """
+                profit, amountOut, result = watcher.validate(
+                    tokens,
+                    amounts,
+                    routers,
+                    {"from": account},
                 )
-                try:
-                    profit, amountOut = watcher.check(
-                        token1,
-                        amountTokenPay,
-                        token0,
-                        dex1_router,
-                        dex0_router,
-                        {"from": account},
+                if profit > 0:
+                    print(
+                        f"profit: {profit} amountOut: {amountOut} token0: {result[0]} token1: {result[1]}"
                     )
-                    print(f"pair1_id: {pair1_id} profit: {profit}")
-                except:
-                    print("error")
+                # except:
+                #    print("Oops!", sys.exc_info()[0], "occurred.")
+    print("Finished processing pairs!")
+
+
+def main():
+    cidades = []
+    pt_cid = []
+    c1 = cidade("lisboa", 1000)
+    pt_cid.append(c1)
+    c2 = cidade("porto", 500)
+    pt_cid.append(c2)
+    cidades.append(pt_cid)
+    es_cid = []
+    c3 = cidade("madrid", 2000)
+    es_cid.append(c3)
+    c4 = cidade("barcelona", 1500)
+    es_cid.append(c4)
+    cidades.append(es_cid)
+    fr_cid = []
+    c5 = cidade("paris", 2500)
+    fr_cid.append(c5)
+    c6 = cidade("lyon", 200)
+    fr_cid.append(c6)
+    cidades.append(fr_cid)
+    cidades.sort(key=lambda x: sum(p.habitantes for p in x), reverse=True)
+    for list in cidades:
+        result = sum(p.habitantes for p in list)
+        print(f"result: {result}")
+        for c in list:
+            print(f"nome: {c.nome} habitantes: {c.habitantes}")
+    """
+    tokens = []
+    tokens.append("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+    tokens.append("0xdac17f958d2ee523a2206206994597c13d831ec7")
+    amounts = []
+    amounts.append(1000000000000000000)
+    amounts.append(1000000)
+    routers = []
+    routers.append("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
+    routers.append("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
+    watcher, account = deploy_watcher()
+    profit = 0
+    amount = watcher.test(
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        1000000,
+        "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+        "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
+        {"from": account},
+    )
+    print(f"profit: {profit} amount: {amount}")
+    """
+
+
+def main1():
+    watcher, account = deploy_watcher()
+    dex_info = get_dex_data()
+    for d in dex_info:
+        size = len(d.pairs)
+        print(
+            f"dex name: {d.name} factory: {d.factory} router: {d.router} default_token: {d.default_token} pairs: {size} graph: {d.use_graph}"
+        )
+    dex_info_processor(watcher, account, dex_info)
+    # Multiprocessing a for loop
+    # https://stackoverflow.com/a/20192251
+    # https://docs.python.org/3/library/itertools.html
+    # check
 
 
 # erro: UniswapV2Library: INSUFFICIENT_INPUT_AMOUNT - https://github.com/Uniswap/v2-periphery/blob/master/contracts/libraries/UniswapV2Library.sol
