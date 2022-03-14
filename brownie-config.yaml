@@ -5,6 +5,7 @@ compiler:
     remappings:
       - '@openzeppelin=OpenZeppelin/openzeppelin-contracts@3.4.0'
 dotenv: .env
+liquidity_pairs_list_percentage: 25
 networks:
   default: mainnet-fork
   development:

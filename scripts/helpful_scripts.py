@@ -191,3 +191,7 @@ def get_account(index=None, id=None):
     ):
         return accounts[0]
     return accounts.add(config["wallets"]["from_key"])
+
+
+def get_liquidity_pairs_list_percentage():
+    return int(config["liquidity_pairs_list_percentage"])

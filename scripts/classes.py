@@ -59,13 +59,6 @@ class pair:
         self.token0 = token0
         self.token1 = token1
 
-
-class cidade:
-    def __init__(self, nome, habitantes):
-        self.nome = nome
-        self.habitantes = habitantes
-
-
 class dex_pair_info:
     def __init__(self, dex_name, pair_id, dailyVolumeUSD, token0, token1):
         self.dex_name = dex_name
@@ -73,6 +66,19 @@ class dex_pair_info:
         self.dailyVolumeUSD = dailyVolumeUSD
         self.token0 = token0
         self.token1 = token1
+
+
+class dex_pair_final:
+    def __init__(
+        self, dex_names, factories, routers, pairs_id, tokens, decimals, amounts
+    ):
+        self.dex_names = dex_names
+        self.factories = factories
+        self.routers = routers
+        self.pairs_id = pairs_id
+        self.tokens = tokens
+        self.decimals = decimals
+        self.amounts = amounts
 
 
 class fakefloat(float):

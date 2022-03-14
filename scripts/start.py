@@ -5,8 +5,9 @@ from scripts.helpful_scripts import (
     list_of_tokens,
     get_account,
     get_dex_info,
+    get_liquidity_pairs_list_percentage,
 )
-from scripts.classes import token, ObjectEncoder, dex_pair_info, cidade
+from scripts.classes import token, ObjectEncoder, dex_pair_info, dex_pair_final
 import json
 from json import JSONEncoder
 from brownie import ChainWatcher
@@ -16,6 +17,9 @@ import time
 from datetime import date
 from datetime import datetime
 from datetime import timedelta
+
+MOST_TRADED_PAIRS_LIST = []
+LESS_TRADED_PAIRS_LIST = []
 
 
 def deploy_watcher():
@@ -73,54 +77,121 @@ def get_dex_pairs_list(dex_info):
 def dex_info_processor(watcher, account, dex_info):
     print("Processing pairs ....")
     final_dex_pairs_list = get_dex_pairs_list(dex_info)
-    for lst in final_dex_pairs_list:
-        for index, dex_p in enumerate(lst):
-            if index + 1 < len(lst) and index >= 0:
-                curr_item = dex_p
-                next_item = lst[index + 1]
-                dex0_name = curr_item.dex_name
-                dex1_name = next_item.dex_name
-                dex0_factory, dex0_router = get_dex_info(dex_info, curr_item.dex_name)
-                pair0_id = curr_item.pair_id
-                dex1_factory, dex1_router = get_dex_info(dex_info, next_item.dex_name)
-                pair1_id = next_item.pair_id
-                token0 = curr_item.token0["id"]
-                token1 = curr_item.token1["id"]
-                token0_decimals = curr_item.token0["decimals"]
-                token1_decimals = curr_item.token1["decimals"]
-                amount0 = 10 ** int(token0_decimals)
-                amount1 = 10 ** int(token1_decimals)
-                tokens = []
-                tokens.append(token0)
-                tokens.append(token1)
-                amounts = []
-                amounts.append(amount0)
-                amounts.append(amount1)
-                routers = []
-                routers.append(dex0_router)
-                routers.append(dex1_router)
-                pairs = []
-                pairs.append(pair0_id)
-                pairs.append(pair1_id)
-                # try:
-                profit, amountOut, result, balance0, balance1 = watcher.validate(
-                    tokens,
-                    amounts,
-                    routers,
-                    pairs,
-                    {"from": account},
-                )
-                if profit > 0:
-                    print(
-                        f"profit: {profit} amountOut: {amountOut} token0: {result[0]} token1: {result[1]} balance0 0: {balance0[0]} balance0 1: {balance0[1]} balance1 0: {balance1[0]} balance1 1: {balance1[1]}"
-                    )
-                # except:
-                #    print("Oops!", sys.exc_info()[0], "occurred.")
+    sz = len(final_dex_pairs_list)
+    most_traded_dex_pairs_list, less_traded_dex_pairs_list = list_divide(
+        final_dex_pairs_list
+    )
+    MOST_TRADED_PAIRS_LIST = list_prepare(most_traded_dex_pairs_list, dex_info)
+    LESS_TRADED_PAIRS_LIST = list_prepare(less_traded_dex_pairs_list, dex_info)
+    sz1 = len(MOST_TRADED_PAIRS_LIST)
+    sz2 = len(LESS_TRADED_PAIRS_LIST)
     print("Finished processing pairs!")
+
+
+def list_prepare(final_dex_pairs_list, dex_info):
+    final_list = []
+    for lst in final_dex_pairs_list:
+        tmp_list = []
+        for index_current, item_current in enumerate(lst):
+            if index_current + 1 < len(lst) and index_current >= 0:
+                for index_next, item_next in enumerate(lst):
+                    if index_next > index_current:
+                        curr_item = item_current
+                        next_item = item_next
+                        dex0_name = curr_item.dex_name
+                        dex1_name = next_item.dex_name
+                        dex_name = []
+                        dex_name.append(dex0_name)
+                        dex_name.append(dex1_name)
+                        dex0_factory, dex0_router = get_dex_info(
+                            dex_info, curr_item.dex_name
+                        )
+                        dex1_factory, dex1_router = get_dex_info(
+                            dex_info, next_item.dex_name
+                        )
+                        factories = []
+                        factories.append(dex0_factory)
+                        factories.append(dex1_factory)
+                        routers = []
+                        routers.append(dex0_router)
+                        routers.append(dex1_router)
+                        pair0_id = curr_item.pair_id
+                        pair1_id = next_item.pair_id
+                        pairs = []
+                        pairs.append(pair0_id)
+                        pairs.append(pair1_id)
+                        token0 = curr_item.token0["id"]
+                        token1 = curr_item.token1["id"]
+                        tokens = []
+                        tokens.append(token0)
+                        tokens.append(token1)
+                        token0_decimals = curr_item.token0["decimals"]
+                        token1_decimals = curr_item.token1["decimals"]
+                        decimals = []
+                        decimals.append(token0_decimals)
+                        decimals.append(token1_decimals)
+                        amount0 = 10 ** int(token0_decimals)
+                        amount1 = 10 ** int(token1_decimals)
+                        amounts = []
+                        amounts.append(amount0)
+                        amounts.append(amount1)
+                        # create object
+                        dpf = dex_pair_final(
+                            dex_name,
+                            factories,
+                            routers,
+                            pairs,
+                            tokens,
+                            decimals,
+                            amounts,
+                        )
+                        tmp_list.append(dpf)
+        final_list.append(tmp_list)
+    return final_list
+
+
+def check_profitability():
+    # try:
+    profit, amountOut, result, balance0, balance1 = watcher.validate(
+        tokens,
+        amounts,
+        routers,
+        pairs,
+        {"from": account},
+    )
+    if profit > 0:
+        print(
+            f"profit: {profit} amountOut: {amountOut} token0: {result[0]} token1: {result[1]} balance0 0: {balance0[0]} balance0 1: {balance0[1]} balance1 0: {balance1[0]} balance1 1: {balance1[1]}"
+        )
+    # except:
+    #    print("Oops!", sys.exc_info()[0], "occurred.")
+
+
+def list_divide(final_dex_pairs_list):
+    LUIQ_PAIR_PERC = get_liquidity_pairs_list_percentage()
+    if LUIQ_PAIR_PERC < 10:
+        LUIQ_PAIR_PERC = 10
+    elif LUIQ_PAIR_PERC > 50:
+        LUIQ_PAIR_PERC = 50
+    size = len(final_dex_pairs_list)
+    value = int(size * (LUIQ_PAIR_PERC / 100))
+    first_part = final_dex_pairs_list[:value]
+    second_part = final_dex_pairs_list[value:]
+    return first_part, second_part
 
 
 def main1():
     # test
+
+    lst = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+
+    print("first_half")
+    for v in first_half:
+        print(f"value: {v}")
+    print("second_half")
+    for v in second_half:
+        print(f"value: {v}")
+
     """
     https://stackoverflow.com/a/12032202
     import itertools
