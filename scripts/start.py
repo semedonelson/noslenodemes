@@ -12,11 +12,11 @@ import json
 from json import JSONEncoder
 from brownie import ChainWatcher
 import sys
-
 import time
 from datetime import date
 from datetime import datetime
 from datetime import timedelta
+import concurrent.futures
 
 MOST_TRADED_PAIRS_LIST = []
 LESS_TRADED_PAIRS_LIST = []
@@ -180,95 +180,68 @@ def list_divide(final_dex_pairs_list):
     return first_part, second_part
 
 
-def main1():
-    # test
+def do_something01(secs):
+    print("do_something01")
+    date_time = datetime.now()
+    next_date_time = date_time + timedelta(minutes=1)
+    unix_time_1 = int(time.mktime(next_date_time.timetuple()))
+    unix_time_2 = int(time.mktime(date_time.timetuple()))
+    print(f"unix_time: {unix_time_1} date_time: {unix_time_2}")
+    while unix_time_1 > unix_time_2:
+        date_time = datetime.now()
+        unix_time_2 = int(time.mktime(date_time.timetuple()))
+        print(f"unix_time: {unix_time_1} date_time: {unix_time_2}")
+        time.sleep(secs)
+    print("Done do_something01! ")
 
-    lst = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 
-    print("first_half")
-    for v in first_half:
-        print(f"value: {v}")
-    print("second_half")
-    for v in second_half:
-        print(f"value: {v}")
+def do_something02(secs):
+    print("do_something02")
+    time.sleep(secs)
+    print("Done do_something02! ")
 
-    """
-    https://stackoverflow.com/a/12032202
-    import itertools
 
-    for a,b,c in itertools.product(cc1, cc2, cc3):
-        print a,b,c
-    """
-    """
-    cidades = []
-    pt_cid = []
-    c1 = cidade("lisboa", 1000)
-    pt_cid.append(c1)
-    c2 = cidade("porto", 500)
-    pt_cid.append(c2)
-    cidades.append(pt_cid)
-    es_cid = []
-    c3 = cidade("madrid", 2000)
-    es_cid.append(c3)
-    c4 = cidade("barcelona", 1500)
-    es_cid.append(c4)
-    cidades.append(es_cid)
-    fr_cid = []
-    c5 = cidade("paris", 2500)
-    fr_cid.append(c5)
-    c6 = cidade("lyon", 200)
-    fr_cid.append(c6)
-    cidades.append(fr_cid)
-    cidades.sort(key=lambda x: sum(p.habitantes for p in x), reverse=True)
-    for list in cidades:
-        result = sum(p.habitantes for p in list)
-        print(f"result: {result}")
-        for c in list:
-            print(f"nome: {c.nome} habitantes: {c.habitantes}")
-    """
-    """
-    tokens = []
-    tokens.append("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
-    tokens.append("0xdac17f958d2ee523a2206206994597c13d831ec7")
-    amounts = []
-    amounts.append(1000000000000000000)
-    amounts.append(1000000)
-    routers = []
-    routers.append("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
-    routers.append("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
-    watcher, account = deploy_watcher()
-    profit = 0
-    amount = watcher.test(
-        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-        1000000,
-        "0xdac17f958d2ee523a2206206994597c13d831ec7",
-        "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-        "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
-        {"from": account},
-    )
-    print(f"profit: {profit} amount: {amount}")
-    """
+def do_something03(secs):
+    print("do_something03")
+    time.sleep(secs)
+    print("Done do_something03! ")
+
+
+def do_something04(secs):
+    print("do_something04")
+    time.sleep(secs)
+    print("Done do_something04! ")
 
 
 def main():
+    start = time.perf_counter()
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        f1 = executor.submit(do_something01, 10)
+        f2 = executor.submit(do_something02, 1)
+        f3 = executor.submit(do_something03, 1)
+        f4 = executor.submit(do_something04, 1)
+
+    print(f1.result(), f3.result(), f3.result(), f4.result())
+
+    end = time.perf_counter()
+    total = round(end - start, 2)
+    print(f"Finished in {total} seconds")
+
+
+def main1():
     watcher, account = deploy_watcher()
-    dex_info = get_dex_data()
+    dex_info = (
+        get_dex_data()
+    )  # um thread aqui(esta thread para procurar alterações de x em x tempo)
     for d in dex_info:
         size = len(d.pairs)
         print(
             f"dex name: {d.name} factory: {d.factory} router: {d.router} default_token: {d.default_token} pairs: {size} graph: {d.use_graph}"
         )
+    # sempre que há o resultado do thread anterior
     dex_info_processor(watcher, account, dex_info)
-    # Multiprocessing a for loop
-    # https://stackoverflow.com/a/20192251
-    # https://docs.python.org/3/library/itertools.html
-    # check
 
-
-# erro: UniswapV2Library: INSUFFICIENT_INPUT_AMOUNT - https://github.com/Uniswap/v2-periphery/blob/master/contracts/libraries/UniswapV2Library.sol
-# https://www.geeksforgeeks.org/python-remove-all-values-from-a-list-present-in-other-list/
-# check pair for non graph dex
-
-
-# https://github.com/Uniswap/v2-core/blob/master/contracts/UniswapV2Pair.sol
-# reserve and balances
+    # havera um thread para processar o MOST_TRADED_PAIRS_LIST e
+    # um outro thread para o LESS_TRADED_PAIRS_LIST
+    # Um ultimo thread é para executar o resultado das duas threads anteriores
