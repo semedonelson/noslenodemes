@@ -11,15 +11,19 @@ from scripts.classes import token, ObjectEncoder, dex_pair_info, dex_pair_final
 import json
 from json import JSONEncoder
 from brownie import ChainWatcher
-import sys
+import sys, signal
 import time
 from datetime import date
 from datetime import datetime
 from datetime import timedelta
 import concurrent.futures
+import random
+from queue import Queue
 
 MOST_TRADED_PAIRS_LIST = []
 LESS_TRADED_PAIRS_LIST = []
+TEST_LIST = []
+list_filled = False
 
 
 def deploy_watcher():
@@ -180,24 +184,59 @@ def list_divide(final_dex_pairs_list):
     return first_part, second_part
 
 
-def do_something01(secs):
+def do_test_list(q):
+    for _ in range(0, 10):
+        TEST_LIST.append(random.randint(0, 100))
+    list_filled = True
+    q.put(list_filled)
+    time.sleep(10)
+    print(f"do_test_list: list_filled: {list_filled}")
+
+
+def do_something01(secs, q):
     print("do_something01")
-    date_time = datetime.now()
-    next_date_time = date_time + timedelta(minutes=1)
-    unix_time_1 = int(time.mktime(next_date_time.timetuple()))
-    unix_time_2 = int(time.mktime(date_time.timetuple()))
-    print(f"unix_time: {unix_time_1} date_time: {unix_time_2}")
-    while unix_time_1 > unix_time_2:
-        date_time = datetime.now()
-        unix_time_2 = int(time.mktime(date_time.timetuple()))
-        print(f"unix_time: {unix_time_1} date_time: {unix_time_2}")
-        time.sleep(secs)
+    while True:
+        try:
+            date_time_current = datetime.now()
+            date_time_next = date_time_current + timedelta(minutes=1)
+            unix_date_time_current = int(time.mktime(date_time_current.timetuple()))
+            unix_date_time_next = int(time.mktime(date_time_next.timetuple()))
+            print("execute do_test_list")
+            do_test_list(q)
+            while unix_date_time_next > unix_date_time_current:
+                try:
+                    date_time_current = datetime.now()
+                    unix_date_time_current = int(
+                        time.mktime(date_time_current.timetuple())
+                    )
+                    time.sleep(secs)
+                except KeyboardInterrupt:
+                    print("shutdown initialized")
+                    break
+                except:
+                    continue
+        except KeyboardInterrupt:
+            print("shutdown initialized")
+            break
+        except:
+            continue
     print("Done do_something01! ")
 
 
-def do_something02(secs):
+def do_something02(secs, q):
     print("do_something02")
-    time.sleep(secs)
+    my_test_list = []
+    while True:
+        list_filled = q.get()
+        if list_filled:
+            my_test_list = TEST_LIST.copy()
+            list_filled = False
+            print("New List")
+        for value in my_test_list:
+            print(f"value: {value}")
+        time.sleep(10)
+        print(f"do_something02: list_filled: {list_filled}")
+
     print("Done do_something02! ")
 
 
@@ -215,14 +254,15 @@ def do_something04(secs):
 
 def main():
     start = time.perf_counter()
+    queue = Queue()
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        f1 = executor.submit(do_something01, 10)
-        f2 = executor.submit(do_something02, 1)
+        f1 = executor.submit(do_something01, 1, queue)
+        f2 = executor.submit(do_something02, 10, queue)
         f3 = executor.submit(do_something03, 1)
         f4 = executor.submit(do_something04, 1)
 
-    print(f1.result(), f3.result(), f3.result(), f4.result())
+    print(f1.result(), f2.result(), f3.result(), f4.result())
 
     end = time.perf_counter()
     total = round(end - start, 2)
