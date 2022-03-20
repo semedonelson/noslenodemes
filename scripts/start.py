@@ -185,12 +185,12 @@ def list_divide(final_dex_pairs_list):
 
 
 def do_test_list(q):
+    TEST_LIST = []
     for _ in range(0, 10):
         TEST_LIST.append(random.randint(0, 100))
     list_filled = True
-    q.put(list_filled)
+    q.put(TEST_LIST)
     time.sleep(10)
-    print(f"do_test_list: list_filled: {list_filled}")
 
 
 def do_something01(secs, q):
@@ -227,14 +227,11 @@ def do_something02(secs, q):
     print("do_something02")
     my_test_list = []
     while True:
-        list_filled = q.get()
-        if list_filled:
-            my_test_list = TEST_LIST.copy()
-            list_filled = False
-            print("New List")
+        my_test_list = q.get().copy()
+        print("New List")
         for value in my_test_list:
             print(f"value: {value}")
-        time.sleep(10)
+        time.sleep(1)
         print(f"do_something02: list_filled: {list_filled}")
 
     print("Done do_something02! ")
