@@ -10,7 +10,7 @@ from scripts.helpful_scripts import (
 from scripts.classes import token, ObjectEncoder, dex_pair_info, dex_pair_final
 import json
 from json import JSONEncoder
-from brownie import ChainWatcher
+from brownie import config, ChainWatcher
 import sys, signal
 import time
 from datetime import date
@@ -22,8 +22,10 @@ from queue import Queue
 
 MOST_TRADED_PAIRS_LIST = []
 LESS_TRADED_PAIRS_LIST = []
-TEST_LIST = []
-list_filled = False
+DEX_INFO_LIST = []
+queue_dex_info = Queue()
+queue_most_traded_pairs = Queue()
+queue_less_traded_pairs = Queue()
 
 
 def deploy_watcher():
@@ -78,18 +80,25 @@ def get_dex_pairs_list(dex_info):
     return final_dex_pairs_list
 
 
-def dex_info_processor(watcher, account, dex_info):
-    print("Processing pairs ....")
-    final_dex_pairs_list = get_dex_pairs_list(dex_info)
-    sz = len(final_dex_pairs_list)
-    most_traded_dex_pairs_list, less_traded_dex_pairs_list = list_divide(
-        final_dex_pairs_list
-    )
-    MOST_TRADED_PAIRS_LIST = list_prepare(most_traded_dex_pairs_list, dex_info)
-    LESS_TRADED_PAIRS_LIST = list_prepare(less_traded_dex_pairs_list, dex_info)
-    sz1 = len(MOST_TRADED_PAIRS_LIST)
-    sz2 = len(LESS_TRADED_PAIRS_LIST)
-    print("Finished processing pairs!")
+def dex_info_processor(watcher, account):
+    while True:
+        dex_info = queue_dex_info.get()
+        for d in dex_info:
+            size = len(d.pairs)
+            print(
+                f"dex name: {d.name} factory: {d.factory} router: {d.router} default_token: {d.default_token} pairs: {size} graph: {d.use_graph}"
+            )
+        print("Processing pairs ....")
+        final_dex_pairs_list = get_dex_pairs_list(dex_info)
+        sz = len(final_dex_pairs_list)
+        most_traded_dex_pairs_list, less_traded_dex_pairs_list = list_divide(
+            final_dex_pairs_list
+        )
+        MOST_TRADED_PAIRS_LIST = list_prepare(most_traded_dex_pairs_list, dex_info)
+        LESS_TRADED_PAIRS_LIST = list_prepare(less_traded_dex_pairs_list, dex_info)
+        queue_most_traded_pairs.put(MOST_TRADED_PAIRS_LIST)
+        queue_less_traded_pairs.put(LESS_TRADED_PAIRS_LIST)
+        print("Finished processing pairs! ")
 
 
 def list_prepare(final_dex_pairs_list, dex_info):
@@ -184,32 +193,30 @@ def list_divide(final_dex_pairs_list):
     return first_part, second_part
 
 
-def do_test_list(q):
-    TEST_LIST = []
-    for _ in range(0, 10):
-        TEST_LIST.append(random.randint(0, 100))
-    list_filled = True
-    q.put(TEST_LIST)
-    time.sleep(10)
+def main1():
+    start = time.perf_counter()
+    end = time.perf_counter()
+    total = round(end - start, 2)
+    print(f"Finished in {total} seconds")
 
 
-def do_something01(secs, q):
-    print("do_something01")
+def fill_dex_info():
     while True:
         try:
             date_time_current = datetime.now()
-            date_time_next = date_time_current + timedelta(minutes=1)
+            date_time_next = date_time_current + timedelta(
+                minutes=int(config["dex_info_process_cicle_minutes"])
+            )
             unix_date_time_current = int(time.mktime(date_time_current.timetuple()))
             unix_date_time_next = int(time.mktime(date_time_next.timetuple()))
-            print("execute do_test_list")
-            do_test_list(q)
+            DEX_INFO_LIST = get_dex_data()
+            queue_dex_info.put(DEX_INFO_LIST)
             while unix_date_time_next > unix_date_time_current:
                 try:
                     date_time_current = datetime.now()
                     unix_date_time_current = int(
                         time.mktime(date_time_current.timetuple())
                     )
-                    time.sleep(secs)
                 except KeyboardInterrupt:
                     print("shutdown initialized")
                     break
@@ -220,65 +227,42 @@ def do_something01(secs, q):
             break
         except:
             continue
-    print("Done do_something01! ")
 
 
-def do_something02(secs, q):
-    print("do_something02")
-    my_test_list = []
+def execute_most_traded_pairs():
+    list = []
     while True:
-        my_test_list = q.get().copy()
-        print("New List")
-        for value in my_test_list:
-            print(f"value: {value}")
-        time.sleep(1)
-        print(f"do_something02: list_filled: {list_filled}")
-
-    print("Done do_something02! ")
-
-
-def do_something03(secs):
-    print("do_something03")
-    time.sleep(secs)
-    print("Done do_something03! ")
+        try:
+            list = queue_most_traded_pairs.get_nowait()
+        except:
+            pass
+        list_size = len(list)
+        print(f" |Most traded Pairs: {list_size} |")
+        time.sleep(10)
 
 
-def do_something04(secs):
-    print("do_something04")
-    time.sleep(secs)
-    print("Done do_something04! ")
+def execute_less_traded_pairs():
+    list = []
+    while True:
+        try:
+            list = queue_less_traded_pairs.get_nowait()
+        except:
+            pass
+        list_size = len(list)
+        print(f" |Less traded Pairs: {list_size} |")
+        time.sleep(10)
 
 
 def main():
-    start = time.perf_counter()
-    queue = Queue()
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        f1 = executor.submit(do_something01, 1, queue)
-        f2 = executor.submit(do_something02, 10, queue)
-        f3 = executor.submit(do_something03, 1)
-        f4 = executor.submit(do_something04, 1)
-
-    print(f1.result(), f2.result(), f3.result(), f4.result())
-
-    end = time.perf_counter()
-    total = round(end - start, 2)
-    print(f"Finished in {total} seconds")
-
-
-def main1():
     watcher, account = deploy_watcher()
-    dex_info = (
-        get_dex_data()
-    )  # um thread aqui(esta thread para procurar alterações de x em x tempo)
-    for d in dex_info:
-        size = len(d.pairs)
-        print(
-            f"dex name: {d.name} factory: {d.factory} router: {d.router} default_token: {d.default_token} pairs: {size} graph: {d.use_graph}"
-        )
-    # sempre que há o resultado do thread anterior
-    dex_info_processor(watcher, account, dex_info)
-
-    # havera um thread para processar o MOST_TRADED_PAIRS_LIST e
-    # um outro thread para o LESS_TRADED_PAIRS_LIST
-    # Um ultimo thread é para executar o resultado das duas threads anteriores
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        dx_list = executor.submit(fill_dex_info)
+        dx_proc = executor.submit(dex_info_processor, watcher, account)
+        lst_most_traded = executor.submit(execute_most_traded_pairs)
+        lss_most_traded = executor.submit(execute_less_traded_pairs)
+    print(
+        dx_list.result(),
+        dx_proc.result(),
+        lst_most_traded.result(),
+        lss_most_traded.result(),
+    )

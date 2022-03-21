@@ -45,6 +45,8 @@ def get_dex_data():
         use_graph = config["dex"][dex_name]["use_graph"]
         is_master = config["dex"][dex_name]["is_master"]
         return_records = REQUEST_SIZE
+        # to remove
+        total = 0
         dex_pairs = []
         id = ""
         # pairs
@@ -60,6 +62,9 @@ def get_dex_data():
                     my_data = my_dt["data"]
                     pairs = my_data["pairs"]
                     return_records = len(pairs)
+                    # to remove
+                    total += return_records
+                    print(f"total: {total}")
                     # add pair to the list
                     for pair in pairs:
                         pair["dailyVolumeUSD"] = 0
