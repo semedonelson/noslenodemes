@@ -59,6 +59,7 @@ class pair:
         self.token0 = token0
         self.token1 = token1
 
+
 class dex_pair_info:
     def __init__(self, dex_name, pair_id, dailyVolumeUSD, token0, token1):
         self.dex_name = dex_name
@@ -94,3 +95,14 @@ class ObjectEncoder(JSONEncoder):
         if isinstance(obj, decimal.Decimal):
             return fakefloat(obj)
         return obj.__dict__
+
+
+class final_profitable_pairs:
+    def __init__(
+        self, tokenBorrow, tokenPay, amountTokenPay, sourceRouter, targetRouter
+    ):
+        self.tokenBorrow = tokenBorrow
+        self.tokenPay = tokenPay
+        self.amountTokenPay = amountTokenPay
+        self.sourceRouter = sourceRouter
+        self.targetRouter = targetRouter

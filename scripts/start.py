@@ -20,6 +20,7 @@ import concurrent.futures
 import random
 from queue import Queue
 
+# Global variables
 MOST_TRADED_PAIRS_LIST = []
 LESS_TRADED_PAIRS_LIST = []
 DEX_INFO_LIST = []
@@ -80,7 +81,7 @@ def get_dex_pairs_list(dex_info):
     return final_dex_pairs_list
 
 
-def dex_info_processor(watcher, account):
+def dex_info_processor():
     while True:
         dex_info = queue_dex_info.get()
         for d in dex_info:
@@ -99,6 +100,8 @@ def dex_info_processor(watcher, account):
         queue_most_traded_pairs.put(MOST_TRADED_PAIRS_LIST)
         queue_less_traded_pairs.put(LESS_TRADED_PAIRS_LIST)
         print("Finished processing pairs! ")
+        ## to be removed
+        # break
 
 
 def list_prepare(final_dex_pairs_list, dex_info):
@@ -163,23 +166,6 @@ def list_prepare(final_dex_pairs_list, dex_info):
     return final_list
 
 
-def check_profitability():
-    # try:
-    profit, amountOut, result, balance0, balance1 = watcher.validate(
-        tokens,
-        amounts,
-        routers,
-        pairs,
-        {"from": account},
-    )
-    if profit > 0:
-        print(
-            f"profit: {profit} amountOut: {amountOut} token0: {result[0]} token1: {result[1]} balance0 0: {balance0[0]} balance0 1: {balance0[1]} balance1 0: {balance1[0]} balance1 1: {balance1[1]}"
-        )
-    # except:
-    #    print("Oops!", sys.exc_info()[0], "occurred.")
-
-
 def list_divide(final_dex_pairs_list):
     LUIQ_PAIR_PERC = get_liquidity_pairs_list_percentage()
     if LUIQ_PAIR_PERC < 10:
@@ -194,10 +180,10 @@ def list_divide(final_dex_pairs_list):
 
 
 def main1():
-    start = time.perf_counter()
-    end = time.perf_counter()
-    total = round(end - start, 2)
-    print(f"Finished in {total} seconds")
+    watcher, account = deploy_watcher()
+    fill_dex_info()
+    dex_info_processor()
+    execute_most_traded_pairs()
 
 
 def fill_dex_info():
@@ -211,6 +197,8 @@ def fill_dex_info():
             unix_date_time_next = int(time.mktime(date_time_next.timetuple()))
             DEX_INFO_LIST = get_dex_data()
             queue_dex_info.put(DEX_INFO_LIST)
+            ## to be removed
+            # break
             while unix_date_time_next > unix_date_time_current:
                 try:
                     date_time_current = datetime.now()
@@ -230,39 +218,78 @@ def fill_dex_info():
 
 
 def execute_most_traded_pairs():
-    list = []
+    list_most_traded_pairs = []
+    count = 0
     while True:
+        start = time.perf_counter()
+        if len(list_most_traded_pairs) > 0:
+            count += 1
         try:
-            list = queue_most_traded_pairs.get_nowait()
+            list_most_traded_pairs = queue_most_traded_pairs.get_nowait()
         except:
             pass
-        list_size = len(list)
-        print(f" |Most traded Pairs: {list_size} |")
-        time.sleep(10)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            executor.map(check_profitability, list_most_traded_pairs)
+        end = time.perf_counter()
+        total = round(end - start, 2)
+        if len(list_most_traded_pairs) > 0:
+            print(f" Most traded pairs Finished in {total} seconds cycle: {count}")
 
 
 def execute_less_traded_pairs():
-    list = []
+    list_less_traded_pairs = []
+    count = 0
     while True:
+        start = time.perf_counter()
+        if len(list_less_traded_pairs) > 0:
+            count += 1
         try:
-            list = queue_less_traded_pairs.get_nowait()
+            list_less_traded_pairs = queue_less_traded_pairs.get_nowait()
         except:
             pass
-        list_size = len(list)
-        print(f" |Less traded Pairs: {list_size} |")
-        time.sleep(10)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            executor.map(check_profitability, list_less_traded_pairs)
+        end = time.perf_counter()
+        total = round(end - start, 2)
+        if len(list_less_traded_pairs) > 0:
+            print(f" Less traded pairs Finished in {total} seconds cycle: {count}")
+
+
+def check_profitability(dex_pair_final_list):
+    account = get_account()
+    watcher = ChainWatcher[-1]
+    for _dex_pair_final in dex_pair_final_list:
+        # try:
+        profit, amountOut, result, balance0, balance1 = watcher.validate(
+            _dex_pair_final.tokens,
+            _dex_pair_final.amounts,
+            _dex_pair_final.routers,
+            _dex_pair_final.pairs_id,
+            {"from": account},
+        )
+        """
+        if profit > 0:
+            print(
+                f" profit: {profit} amountOut: {amountOut} token0: {result[0]} token1: {result[1]} balance0 0: {balance0[0]} balance0 1: {balance0[1]} balance1 0: {balance1[0]} balance1 1: {balance1[1]}"
+            )
+        """
+        # except:
+    #    print("Oops!", sys.exc_info()[0], "occurred.")
 
 
 def main():
     watcher, account = deploy_watcher()
     with concurrent.futures.ThreadPoolExecutor() as executor:
         dx_list = executor.submit(fill_dex_info)
-        dx_proc = executor.submit(dex_info_processor, watcher, account)
+        dx_proc = executor.submit(dex_info_processor)
         lst_most_traded = executor.submit(execute_most_traded_pairs)
-        lss_most_traded = executor.submit(execute_less_traded_pairs)
-    print(
-        dx_list.result(),
-        dx_proc.result(),
-        lst_most_traded.result(),
-        lss_most_traded.result(),
-    )
+        lst_less_traded = executor.submit(execute_less_traded_pairs)
+        print(
+            dx_list.result(),
+            dx_proc.result(),
+            lst_most_traded.result(),
+            lst_less_traded.result(),
+        )
+
+
+# https://rednafi.github.io/digressions/python/2020/04/21/python-concurrent-futures.html

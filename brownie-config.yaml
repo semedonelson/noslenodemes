@@ -6,7 +6,7 @@ compiler:
       - '@openzeppelin=OpenZeppelin/openzeppelin-contracts@3.4.0'
 dotenv: .env
 liquidity_pairs_list_percentage: 25
-dex_info_process_cicle_minutes: 20 
+dex_info_process_cicle_minutes: 120 
 networks:
   default: mainnet-fork
   development:
