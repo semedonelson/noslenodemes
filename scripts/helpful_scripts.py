@@ -1,6 +1,6 @@
 from brownie import config, network, accounts
 from scripts.classes import oracle_data, ObjectEncoder, pair, dex
-from scripts.getdata import run_query_post
+from scripts.getdata import run_query_post, list_coingecko_tokens
 import csv
 import json
 from json import JSONEncoder
@@ -200,3 +200,7 @@ def get_account(index=None, id=None):
 
 def get_liquidity_pairs_list_percentage():
     return int(config["liquidity_pairs_list_percentage"])
+
+
+def get_coingecko_tokens():
+    return list_coingecko_tokens()

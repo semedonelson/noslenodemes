@@ -6,11 +6,12 @@ from scripts.helpful_scripts import (
     get_account,
     get_dex_info,
     get_liquidity_pairs_list_percentage,
+    get_coingecko_tokens,
 )
 from scripts.classes import token, ObjectEncoder, dex_pair_info, dex_pair_final
 import json
 from json import JSONEncoder
-from brownie import config, ChainWatcher
+from brownie import config, ChainWatcher, FlashSwap, web3
 import sys, signal
 import time
 from datetime import date
@@ -24,9 +25,28 @@ from queue import Queue
 MOST_TRADED_PAIRS_LIST = []
 LESS_TRADED_PAIRS_LIST = []
 DEX_INFO_LIST = []
+DEX_PAIR_FINAL_LIST = []
+TOKENS_RESERVES = {}
 queue_dex_info = Queue()
 queue_most_traded_pairs = Queue()
 queue_less_traded_pairs = Queue()
+queue_dex_pair_final_list = Queue()
+queue_tokens_reserves = Queue()
+
+
+def fill_global_variables():
+    while True:
+        # DEX_PAIR_FINAL_LIST
+        try:
+            DEX_PAIR_FINAL_LIST = queue_dex_pair_final_list.get_nowait()
+        except:
+            pass
+
+        # TOKENS_RESERVES
+        try:
+            TOKENS_RESERVES = queue_tokens_reserves.get_nowait()
+        except:
+            pass
 
 
 def deploy_watcher():
@@ -34,8 +54,17 @@ def deploy_watcher():
     watcher = ChainWatcher.deploy(
         {"from": account},
     )
-    print("Deployed Chain Watcher!")
+    print("Deployed Chain Watcher Contract!")
     return watcher, account
+
+
+def deploy_flash_swap():
+    account = get_account()
+    flash = FlashSwap.deploy(
+        {"from": account},
+    )
+    print("Deployed Flash Swap Contract!")
+    return flash, account
 
 
 def get_dex_pairs_list(dex_info):
@@ -91,7 +120,7 @@ def dex_info_processor():
             )
         print("Processing pairs ....")
         final_dex_pairs_list = get_dex_pairs_list(dex_info)
-        sz = len(final_dex_pairs_list)
+        queue_dex_pair_final_list.put(final_dex_pairs_list)
         most_traded_dex_pairs_list, less_traded_dex_pairs_list = list_divide(
             final_dex_pairs_list
         )
@@ -179,11 +208,67 @@ def list_divide(final_dex_pairs_list):
     return first_part, second_part
 
 
-def main1():
+def get_reserves():
+    watcher = ChainWatcher[-1]
+    while True:
+        tokens_reserves_tmp = {}
+        for _dex_pair_final in DEX_PAIR_FINAL_LIST:
+            # pair 0
+            reserve0, reserve1 = watcher.getReservers(_dex_pair_final.pairs_id[0])
+            tokens_reserves_tmp[
+                _dex_pair_final.pairs_id[0], _dex_pair_final.tokens[0]
+            ] = reserve0
+
+            tokens_reserves_tmp[
+                _dex_pair_final.pairs_id[0], _dex_pair_final.tokens[1]
+            ] = reserve1
+            # pair 1
+            reserve0, reserve1 = watcher.getReservers(_dex_pair_final.pairs_id[1])
+            tokens_reserves_tmp[
+                _dex_pair_final.pairs_id[1], _dex_pair_final.tokens[0]
+            ] = reserve0
+
+            tokens_reserves_tmp[
+                _dex_pair_final.pairs_id[1], _dex_pair_final.tokens[1]
+            ] = reserve1
+        queue_tokens_reserves.put(tokens_reserves_tmp)
+
+
+def main():
+    print("Starting main!")
+
     watcher, account = deploy_watcher()
-    fill_dex_info()
-    dex_info_processor()
-    execute_most_traded_pairs()
+    reserve0, reserve1 = watcher.getReservers(
+        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f"
+    )
+    tokens_reserves[
+        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f",
+        "0xb620be8a1949aa9532e6a3510132864ef9bc3f82",
+    ] = reserve0
+    tokens_reserves[
+        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f",
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    ] = reserve1
+    key0 = (
+        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f",
+        "0xb620be8a1949aa9532e6a3510132864ef9bc3f82",
+    )
+    my_r0 = tokens_reserves[key0]
+    key1 = (
+        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f",
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    )
+    my_r1 = tokens_reserves[key1]
+    print(f"reserve0: {my_r0} reserve1: {my_r1}")
+    """
+    swap_gas_cost(
+        "0x00040a7ebfc9f6fbce4d23bd66b79a603ba1c323",
+        "0x2432c78801380ba2538f9bddf65c81d525e64db4",
+        1000000000000000000,
+        "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+        "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
+    )
+    """
 
 
 def fill_dex_info():
@@ -259,37 +344,87 @@ def check_profitability(dex_pair_final_list):
     account = get_account()
     watcher = ChainWatcher[-1]
     for _dex_pair_final in dex_pair_final_list:
+        amounts = []
+        # vai buscar o min amount do token0 (pair0 e pair1) ...
+        # vai buscar o min amount do token1 (pair0 e pair1) ...
+        # depois use x% do valor
         # try:
-        profit, amountOut, result, balance0, balance1 = watcher.validate(
+        profit, amountOut, result = watcher.validate(
             _dex_pair_final.tokens,
             _dex_pair_final.amounts,
             _dex_pair_final.routers,
             _dex_pair_final.pairs_id,
             {"from": account},
         )
-        """
+
         if profit > 0:
-            print(
-                f" profit: {profit} amountOut: {amountOut} token0: {result[0]} token1: {result[1]} balance0 0: {balance0[0]} balance0 1: {balance0[1]} balance1 0: {balance1[0]} balance1 1: {balance1[1]}"
-            )
-        """
+            if result[0] == _dex_pair_final.tokens[0]:
+                _pairAddress = _dex_pair_final.pairs_id[0]
+                _tokenBorrow = _dex_pair_final.tokens[0]
+                _amountTokenPay = amountOut
+            elif result[0] == _dex_pair_final.tokens[1]:
+                _pairAddress = _dex_pair_final.pairs_id[1]
+                _tokenBorrow = _dex_pair_final.tokens[1]
+                _amountTokenPay = amountOut
         # except:
     #    print("Oops!", sys.exc_info()[0], "occurred.")
 
 
-def main():
+def swap_gas_cost(
+    _pairAddress,
+    _tokenBorrow,
+    _amountTokenPay,
+    _sourceRouter,
+    _targetRouter,
+):
+    flas_swap = FlashSwap[-1]
+    account = get_account()
+    total_block_number = web3.eth.blockNumber + 2
+
+    web3_flas_swap = web3.eth.contract(address=flas_swap.address, abi=flas_swap.abi)
+    estimated_gas = web3_flas_swap.functions.start(
+        total_block_number,
+        web3.toChecksumAddress(_pairAddress.lower()),
+        web3.toChecksumAddress(_tokenBorrow.lower()),
+        _amountTokenPay,
+        web3.toChecksumAddress(_sourceRouter.lower()),
+        web3.toChecksumAddress(_targetRouter.lower()),
+    ).estimateGas({"from": web3.toChecksumAddress(account.address.lower())})
+    print(f"Est. Gas:  {estimated_gas}")
+    """
+    print(f"total_block_number: {total_block_number}")
+    flas_swap.start(
+        total_block_number,
+        web3.toChecksumAddress(_tokenBorrow.lower()),
+        _amountTokenPay,
+        web3.toChecksumAddress(_tokenPay.lower()),
+        web3.toChecksumAddress(_sourceRouter.lower()),
+        web3.toChecksumAddress(_targetRouter.lower()),
+        web3.toChecksumAddress(_sourceFactory.lower()),
+        {"from": account},
+    )
+    """
+
+
+def main1():
     watcher, account = deploy_watcher()
     with concurrent.futures.ThreadPoolExecutor() as executor:
         dx_list = executor.submit(fill_dex_info)
         dx_proc = executor.submit(dex_info_processor)
         lst_most_traded = executor.submit(execute_most_traded_pairs)
         lst_less_traded = executor.submit(execute_less_traded_pairs)
+        global_var = executor.submit(fill_global_variables)
+        reserves = executor.submit(get_reserves)
         print(
             dx_list.result(),
             dx_proc.result(),
             lst_most_traded.result(),
             lst_less_traded.result(),
+            global_var.result(),
+            reserves.result(),
         )
 
 
+if __name__ == "__main__":
+    main()
 # https://rednafi.github.io/digressions/python/2020/04/21/python-concurrent-futures.html

@@ -17,6 +17,7 @@ networks:
     eth_usd_price_feed: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419'
 wallets:
   from_key: ${PRIVATE_KEY}
+coingecko_tokens_list_url: https://api.coingecko.com/api/v3/coins/list
 dex:
   uniswap_v2:
     factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"

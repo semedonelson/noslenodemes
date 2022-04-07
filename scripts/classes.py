@@ -106,3 +106,10 @@ class final_profitable_pairs:
         self.amountTokenPay = amountTokenPay
         self.sourceRouter = sourceRouter
         self.targetRouter = targetRouter
+
+
+class tokens_coingecko_price:
+    def __init__(self, id, symbol, usdPrice):
+        self.id = id
+        self.symbol = symbol
+        self.usdPrice = usdPrice
