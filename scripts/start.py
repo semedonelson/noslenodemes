@@ -25,28 +25,11 @@ from queue import Queue
 MOST_TRADED_PAIRS_LIST = []
 LESS_TRADED_PAIRS_LIST = []
 DEX_INFO_LIST = []
-DEX_PAIR_FINAL_LIST = []
 TOKENS_RESERVES = {}
 queue_dex_info = Queue()
 queue_most_traded_pairs = Queue()
 queue_less_traded_pairs = Queue()
 queue_dex_pair_final_list = Queue()
-queue_tokens_reserves = Queue()
-
-
-def fill_global_variables():
-    while True:
-        # DEX_PAIR_FINAL_LIST
-        try:
-            DEX_PAIR_FINAL_LIST = queue_dex_pair_final_list.get_nowait()
-        except:
-            pass
-
-        # TOKENS_RESERVES
-        try:
-            TOKENS_RESERVES = queue_tokens_reserves.get_nowait()
-        except:
-            pass
 
 
 def deploy_watcher():
@@ -210,65 +193,37 @@ def list_divide(final_dex_pairs_list):
 
 def get_reserves():
     watcher = ChainWatcher[-1]
+    dex_pair_final_list_tmp = []
+    DEX_PAIR_FINAL_LIST = []
     while True:
+        try:
+            dex_pair_final_list_tmp = queue_dex_pair_final_list.get_nowait()
+            if len(dex_pair_final_list_tmp) > 0:
+                DEX_PAIR_FINAL_LIST = dex_pair_final_list_tmp
+        except:
+            pass
+
         tokens_reserves_tmp = {}
         for _dex_pair_final in DEX_PAIR_FINAL_LIST:
             # pair 0
-            reserve0, reserve1 = watcher.getReservers(_dex_pair_final.pairs_id[0])
+            reserve0, reserve1 = watcher.getReservers(_dex_pair_final[0].pair_id)
             tokens_reserves_tmp[
-                _dex_pair_final.pairs_id[0], _dex_pair_final.tokens[0]
+                _dex_pair_final[0].pair_id, _dex_pair_final[0].token0
             ] = reserve0
 
             tokens_reserves_tmp[
-                _dex_pair_final.pairs_id[0], _dex_pair_final.tokens[1]
+                _dex_pair_final[0].pair_id, _dex_pair_final[0].token1
             ] = reserve1
             # pair 1
-            reserve0, reserve1 = watcher.getReservers(_dex_pair_final.pairs_id[1])
+            reserve0, reserve1 = watcher.getReservers(_dex_pair_final[1].pair_id)
             tokens_reserves_tmp[
-                _dex_pair_final.pairs_id[1], _dex_pair_final.tokens[0]
+                _dex_pair_final[1].pair_id, _dex_pair_final[1].token0
             ] = reserve0
 
             tokens_reserves_tmp[
-                _dex_pair_final.pairs_id[1], _dex_pair_final.tokens[1]
+                _dex_pair_final[1].pair_id, _dex_pair_final[1].token1
             ] = reserve1
         queue_tokens_reserves.put(tokens_reserves_tmp)
-
-
-def main():
-    print("Starting main!")
-
-    watcher, account = deploy_watcher()
-    reserve0, reserve1 = watcher.getReservers(
-        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f"
-    )
-    tokens_reserves[
-        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f",
-        "0xb620be8a1949aa9532e6a3510132864ef9bc3f82",
-    ] = reserve0
-    tokens_reserves[
-        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f",
-        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-    ] = reserve1
-    key0 = (
-        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f",
-        "0xb620be8a1949aa9532e6a3510132864ef9bc3f82",
-    )
-    my_r0 = tokens_reserves[key0]
-    key1 = (
-        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f",
-        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-    )
-    my_r1 = tokens_reserves[key1]
-    print(f"reserve0: {my_r0} reserve1: {my_r1}")
-    """
-    swap_gas_cost(
-        "0x00040a7ebfc9f6fbce4d23bd66b79a603ba1c323",
-        "0x2432c78801380ba2538f9bddf65c81d525e64db4",
-        1000000000000000000,
-        "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-        "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
-    )
-    """
 
 
 def fill_dex_info():
@@ -317,8 +272,10 @@ def execute_most_traded_pairs():
             executor.map(check_profitability, list_most_traded_pairs)
         end = time.perf_counter()
         total = round(end - start, 2)
+        """
         if len(list_most_traded_pairs) > 0:
             print(f" Most traded pairs Finished in {total} seconds cycle: {count}")
+        """
 
 
 def execute_less_traded_pairs():
@@ -336,8 +293,10 @@ def execute_less_traded_pairs():
             executor.map(check_profitability, list_less_traded_pairs)
         end = time.perf_counter()
         total = round(end - start, 2)
+        """
         if len(list_less_traded_pairs) > 0:
             print(f" Less traded pairs Finished in {total} seconds cycle: {count}")
+        """
 
 
 def check_profitability(dex_pair_final_list):
@@ -345,13 +304,22 @@ def check_profitability(dex_pair_final_list):
     watcher = ChainWatcher[-1]
     for _dex_pair_final in dex_pair_final_list:
         amounts = []
-        # vai buscar o min amount do token0 (pair0 e pair1) ...
-        # vai buscar o min amount do token1 (pair0 e pair1) ...
-        # depois use x% do valor
-        # try:
+        dex0_reserve0, dex0_reserve1 = watcher.getReservers(_dex_pair_final.pairs_id[0])
+        dex1_reserve0, dex1_reserve1 = watcher.getReservers(_dex_pair_final.pairs_id[1])
+        reserve0 = int(
+            (int(config["percentage_amount_to_use"]) / 100)
+            * min(dex0_reserve0, dex1_reserve0)
+        )
+        reserve1 = int(
+            (int(config["percentage_amount_to_use"]) / 100)
+            * min(dex0_reserve1, dex1_reserve1)
+        )
+        amounts.append(reserve0)
+        amounts.append(reserve1)
+        # try
         profit, amountOut, result = watcher.validate(
             _dex_pair_final.tokens,
-            _dex_pair_final.amounts,
+            amounts,
             _dex_pair_final.routers,
             _dex_pair_final.pairs_id,
             {"from": account},
@@ -362,12 +330,20 @@ def check_profitability(dex_pair_final_list):
                 _pairAddress = _dex_pair_final.pairs_id[0]
                 _tokenBorrow = _dex_pair_final.tokens[0]
                 _amountTokenPay = amountOut
+                perc = round(((amountOut * 100) / amounts[0]), 2)
+                print(
+                    f"amountIn: {amounts[0]} amountOut: {amountOut} Percentage: {perc}"
+                )
             elif result[0] == _dex_pair_final.tokens[1]:
                 _pairAddress = _dex_pair_final.pairs_id[1]
                 _tokenBorrow = _dex_pair_final.tokens[1]
                 _amountTokenPay = amountOut
+                perc = round((((amountOut * 100) / amounts[1]) / 100), 2)
+                print(
+                    f"amountIn: {amounts[1]} amountOut: {amountOut} Percentage: {perc}"
+                )
         # except:
-    #    print("Oops!", sys.exc_info()[0], "occurred.")
+        #    print("Oops!", sys.exc_info()[0], "occurred.")
 
 
 def swap_gas_cost(
@@ -407,21 +383,90 @@ def swap_gas_cost(
 
 
 def main1():
+    print("Starting main!")
+    watcher, account = deploy_watcher()
+    dex_name = []
+    dex_name.append("uniswap")
+    dex_name.append("sushiswap")
+    factories = []
+    factories.append("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")
+    factories.append("0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac")
+    routers = []
+    routers.append("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
+    routers.append("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
+    pairs = []
+    pairs.append("0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f")
+    pairs.append("0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f")
+    tokens = []
+    tokens.append("0xb620be8a1949aa9532e6a3510132864ef9bc3f82")
+    tokens.append("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+    decimals = []
+    decimals.append(18)
+    decimals.append(18)
+    amount0 = 10 ** int(18)
+    amount1 = 10 ** int(18)
+    amounts = []
+    amounts.append(amount0)
+    amounts.append(amount1)
+    dpf = dex_pair_final(
+        dex_name,
+        factories,
+        routers,
+        pairs,
+        tokens,
+        decimals,
+        amounts,
+    )
+    list_final = []
+    list_final.append(dpf)
+    check_profitability(list_final)
+    """
+    reserve0, reserve1 = watcher.getReservers(
+        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f"
+    )
+    tokens_reserves[
+        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f",
+        "0xb620be8a1949aa9532e6a3510132864ef9bc3f82",
+    ] = reserve0
+    tokens_reserves[
+        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f",
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    ] = reserve1
+    key0 = (
+        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f",
+        "0xb620be8a1949aa9532e6a3510132864ef9bc3f82",
+    )
+    my_r0 = tokens_reserves[key0]
+    key1 = (
+        "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f",
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    )
+    my_r1 = tokens_reserves[key1]
+    print(f"reserve0: {my_r0} reserve1: {my_r1}")
+    """
+    """
+    swap_gas_cost(
+        "0x00040a7ebfc9f6fbce4d23bd66b79a603ba1c323",
+        "0x2432c78801380ba2538f9bddf65c81d525e64db4",
+        1000000000000000000,
+        "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+        "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
+    )
+    """
+
+
+def main():
     watcher, account = deploy_watcher()
     with concurrent.futures.ThreadPoolExecutor() as executor:
         dx_list = executor.submit(fill_dex_info)
         dx_proc = executor.submit(dex_info_processor)
         lst_most_traded = executor.submit(execute_most_traded_pairs)
         lst_less_traded = executor.submit(execute_less_traded_pairs)
-        global_var = executor.submit(fill_global_variables)
-        reserves = executor.submit(get_reserves)
         print(
             dx_list.result(),
             dx_proc.result(),
             lst_most_traded.result(),
             lst_less_traded.result(),
-            global_var.result(),
-            reserves.result(),
         )
 
 
