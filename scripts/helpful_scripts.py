@@ -206,9 +206,9 @@ def get_prices():
     prices = {}
     response = get_prices_data()
     try:
-        prices[config["token_weth"]] = response["ethereum"]["usd"]
-        prices[config["token_tether"]] = response["tether"]["usd"]
-        prices[config["token_usdc"]] = response["usd-coin"]["usd"]
+        prices[config["token_weth"].lower()] = response["ethereum"]["usd"]
+        prices[config["token_tether"].lower()] = response["tether"]["usd"]
+        prices[config["token_usdc"].lower()] = response["usd-coin"]["usd"]
     except:
         pass
     return prices

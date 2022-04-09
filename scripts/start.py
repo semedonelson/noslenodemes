@@ -20,6 +20,7 @@ from datetime import timedelta
 import concurrent.futures
 import random
 from queue import Queue
+from decimal import Decimal
 
 # Global variables
 MOST_TRADED_PAIRS_LIST = []
@@ -303,7 +304,6 @@ def execute_less_traded_pairs():
 def check_profitability(dex_pair_final_list):
     account = get_account()
     watcher = ChainWatcher[-1]
-    global PRICES
     for _dex_pair_final in dex_pair_final_list:
         amounts = []
         dex0_reserve0, dex0_reserve1 = watcher.getReservers(_dex_pair_final.pairs_id[0])
@@ -326,26 +326,75 @@ def check_profitability(dex_pair_final_list):
             _dex_pair_final.pairs_id,
             {"from": account},
         )
-
         if profit > 0:
             if result[0] == _dex_pair_final.tokens[0]:
                 _pairAddress = _dex_pair_final.pairs_id[0]
                 _tokenBorrow = _dex_pair_final.tokens[0]
                 _amountTokenPay = amountOut
-                weth_price = PRICES[config["token_weth"]]
-                perc = round(((amountOut * 100) / amounts[0]), 2)
-                print(
-                    f"amountIn: {amounts[0]} amountOut: {amountOut} Percentage: {perc} weth_price: {weth_price}"
+                _sourceRouter = _dex_pair_final.routers[0]
+                _targetRouter = _dex_pair_final.routers[1]
+                swap_gas_cost(
+                    _pairAddress,
+                    _tokenBorrow,
+                    _amountTokenPay,
+                    _sourceRouter,
+                    _targetRouter,
                 )
+                """
+                _amountTokenPay_d = Decimal(_amountTokenPay) / Decimal(
+                    10 ** int(_dex_pair_final.decimals[0])
+                )
+                reserve0_d = Decimal(dex0_reserve0) / Decimal(
+                    10 ** int(_dex_pair_final.decimals[0])
+                )
+                reserve1_d = Decimal(dex0_reserve1) / Decimal(
+                    10 ** int(_dex_pair_final.decimals[1])
+                )
+                gross_profit_usd = get_amount_usd_value(
+                    _tokenBorrow.lower(),
+                    _amountTokenPay_d,
+                    reserve0_d,
+                    reserve1_d,
+                    _dex_pair_final.tokens[0].lower(),
+                    _dex_pair_final.tokens[1].lower(),
+                )
+                r = round(gross_profit_usd, 1)
+                print(f"gross_profit_usd: {gross_profit_usd} r: {r}")
+                """
             elif result[0] == _dex_pair_final.tokens[1]:
                 _pairAddress = _dex_pair_final.pairs_id[1]
                 _tokenBorrow = _dex_pair_final.tokens[1]
                 _amountTokenPay = amountOut
-                weth_price = PRICES[config["token_weth"]]
-                perc = round((((amountOut * 100) / amounts[1]) / 100), 2)
-                print(
-                    f"amountIn: {amounts[1]} amountOut: {amountOut} Percentage: {perc} weth_price: {weth_price}"
+                _sourceRouter = _dex_pair_final.routers[1]
+                _targetRouter = _dex_pair_final.routers[0]
+                swap_gas_cost(
+                    _pairAddress,
+                    _tokenBorrow,
+                    _amountTokenPay,
+                    _sourceRouter,
+                    _targetRouter,
                 )
+                """
+                _amountTokenPay_d = Decimal(_amountTokenPay) / Decimal(
+                    10 ** int(_dex_pair_final.decimals[1])
+                )
+                reserve0_d = Decimal(dex1_reserve0) / Decimal(
+                    10 ** int(_dex_pair_final.decimals[0])
+                )
+                reserve1_d = Decimal(dex1_reserve1) / Decimal(
+                    10 ** int(_dex_pair_final.decimals[1])
+                )
+                gross_profit_usd = get_amount_usd_value(
+                    _tokenBorrow.lower(),
+                    _amountTokenPay_d,
+                    reserve0_d,
+                    reserve1_d,
+                    _dex_pair_final.tokens[0].lower(),
+                    _dex_pair_final.tokens[1].lower(),
+                )
+                r = round(gross_profit_usd, 1)
+                print(f"gross_profit_usd: {gross_profit_usd} r: {r}")
+                """
         # except:
         #    print("Oops!", sys.exc_info()[0], "occurred.")
 
@@ -395,11 +444,47 @@ def swap_gas_cost(
     """
 
 
+def get_amount_usd_value(token_borrow, amount, reserve0, reserve1, token0, token1):
+    global PRICES
+    token0_price = 0
+    token1_price = 0
+    pos = -1
+    usd_price = 0
+    try:
+        token0_price = PRICES[token0]
+        pos = 0
+    except:
+        pass
+    try:
+        token1_price = PRICES[token1]
+        pos = 1
+    except:
+        pass
+
+    if token_borrow == token0 and pos == 0:
+        usd_price = amount * token0_price
+    elif token_borrow == token1 and pos == 1:
+        usd_price = amount * token1_price
+    else:
+        if token_borrow == token0:
+            usd_price = ((reserve1 / reserve0) * token1_price) * amount
+        elif token_borrow == token1:
+            usd_price = ((reserve10 / reserve1) * token0_price) * amount
+
+    return usd_price
+
+
+def tst_fill_prices_info():
+    global PRICES
+    pr = get_prices()
+    if len(pr) > 0:
+        PRICES = pr
+
+
 def main1():
     print("Starting main!")
     watcher, account = deploy_watcher()
-    fill_prices_info()
-    """
+    deploy_flash_swap()
     dex_name = []
     dex_name.append("uniswap")
     dex_name.append("sushiswap")
@@ -410,10 +495,10 @@ def main1():
     routers.append("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
     routers.append("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
     pairs = []
-    pairs.append("0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f")
-    pairs.append("0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f")
+    pairs.append("0x08b57d4e6404da14d41290fd4e4cc281eff7c517")
+    pairs.append("0xf86710f80bb24d31fb219f06fe2953b825ab2975")
     tokens = []
-    tokens.append("0xb620be8a1949aa9532e6a3510132864ef9bc3f82")
+    tokens.append("0x8dd4228605e467671941ffb4cae15cf7959c8d9d")
     tokens.append("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
     decimals = []
     decimals.append(18)
@@ -435,7 +520,6 @@ def main1():
     list_final = []
     list_final.append(dpf)
     check_profitability(list_final)
-    """
     """
     reserve0, reserve1 = watcher.getReservers(
         "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f"
@@ -493,3 +577,4 @@ if __name__ == "__main__":
 # https://rednafi.github.io/digressions/python/2020/04/21/python-concurrent-futures.html
 # https://www.adamsmith.haus/python/answers/how-to-use-a-global-variable-with-multiple-threads-in-python
 # https://www.adamsmith.haus/python/examples/4035/threading-share-a-global-variable-between-two-threads
+# web3_flas_swap.functions.start estimated_gas: 298750
