@@ -6,7 +6,7 @@ from scripts.helpful_scripts import (
     get_account,
     get_dex_info,
     get_liquidity_pairs_list_percentage,
-    get_coingecko_tokens,
+    get_prices,
 )
 from scripts.classes import token, ObjectEncoder, dex_pair_info, dex_pair_final
 import json
@@ -25,7 +25,8 @@ from queue import Queue
 MOST_TRADED_PAIRS_LIST = []
 LESS_TRADED_PAIRS_LIST = []
 DEX_INFO_LIST = []
-TOKENS_RESERVES = {}
+PRICES = {}
+# Queues
 queue_dex_info = Queue()
 queue_most_traded_pairs = Queue()
 queue_less_traded_pairs = Queue()
@@ -302,6 +303,7 @@ def execute_less_traded_pairs():
 def check_profitability(dex_pair_final_list):
     account = get_account()
     watcher = ChainWatcher[-1]
+    global PRICES
     for _dex_pair_final in dex_pair_final_list:
         amounts = []
         dex0_reserve0, dex0_reserve1 = watcher.getReservers(_dex_pair_final.pairs_id[0])
@@ -330,20 +332,31 @@ def check_profitability(dex_pair_final_list):
                 _pairAddress = _dex_pair_final.pairs_id[0]
                 _tokenBorrow = _dex_pair_final.tokens[0]
                 _amountTokenPay = amountOut
+                weth_price = PRICES[config["token_weth"]]
                 perc = round(((amountOut * 100) / amounts[0]), 2)
                 print(
-                    f"amountIn: {amounts[0]} amountOut: {amountOut} Percentage: {perc}"
+                    f"amountIn: {amounts[0]} amountOut: {amountOut} Percentage: {perc} weth_price: {weth_price}"
                 )
             elif result[0] == _dex_pair_final.tokens[1]:
                 _pairAddress = _dex_pair_final.pairs_id[1]
                 _tokenBorrow = _dex_pair_final.tokens[1]
                 _amountTokenPay = amountOut
+                weth_price = PRICES[config["token_weth"]]
                 perc = round((((amountOut * 100) / amounts[1]) / 100), 2)
                 print(
-                    f"amountIn: {amounts[1]} amountOut: {amountOut} Percentage: {perc}"
+                    f"amountIn: {amounts[1]} amountOut: {amountOut} Percentage: {perc} weth_price: {weth_price}"
                 )
         # except:
         #    print("Oops!", sys.exc_info()[0], "occurred.")
+
+
+def fill_prices_info():
+    global PRICES
+    while True:
+        pr = get_prices()
+        if len(pr) > 0:
+            PRICES = pr
+        time.sleep(int(config["coingecko_prices_refresh_seconds"]))
 
 
 def swap_gas_cost(
@@ -385,6 +398,8 @@ def swap_gas_cost(
 def main1():
     print("Starting main!")
     watcher, account = deploy_watcher()
+    fill_prices_info()
+    """
     dex_name = []
     dex_name.append("uniswap")
     dex_name.append("sushiswap")
@@ -420,6 +435,7 @@ def main1():
     list_final = []
     list_final.append(dpf)
     check_profitability(list_final)
+    """
     """
     reserve0, reserve1 = watcher.getReservers(
         "0x9c84f58bb51fabd18698efe95f5bab4f33e96e8f"
@@ -462,14 +478,18 @@ def main():
         dx_proc = executor.submit(dex_info_processor)
         lst_most_traded = executor.submit(execute_most_traded_pairs)
         lst_less_traded = executor.submit(execute_less_traded_pairs)
+        prices = executor.submit(fill_prices_info)
         print(
             dx_list.result(),
             dx_proc.result(),
             lst_most_traded.result(),
             lst_less_traded.result(),
+            prices.result(),
         )
 
 
 if __name__ == "__main__":
     main()
 # https://rednafi.github.io/digressions/python/2020/04/21/python-concurrent-futures.html
+# https://www.adamsmith.haus/python/answers/how-to-use-a-global-variable-with-multiple-threads-in-python
+# https://www.adamsmith.haus/python/examples/4035/threading-share-a-global-variable-between-two-threads

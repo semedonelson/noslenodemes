@@ -8,6 +8,11 @@ dotenv: .env
 liquidity_pairs_list_percentage: 25
 dex_info_process_cicle_minutes: 120
 percentage_amount_to_use: 50
+coingecko_prices_url: "https://api.coingecko.com/api/v3/simple/price?ids=ethereum,tether,usd-coin&vs_currencies=usd"
+token_weth: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+token_tether: "0xdac17f958d2ee523a2206206994597c13d831ec7"
+token_usdc: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+coingecko_prices_refresh_seconds: 20
 networks:
   default: mainnet-fork
   development:

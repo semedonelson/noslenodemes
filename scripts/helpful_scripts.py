@@ -1,6 +1,6 @@
 from brownie import config, network, accounts
 from scripts.classes import oracle_data, ObjectEncoder, pair, dex
-from scripts.getdata import run_query_post, list_coingecko_tokens
+from scripts.getdata import run_query_post, get_prices_data
 import csv
 import json
 from json import JSONEncoder
@@ -202,5 +202,13 @@ def get_liquidity_pairs_list_percentage():
     return int(config["liquidity_pairs_list_percentage"])
 
 
-def get_coingecko_tokens():
-    return list_coingecko_tokens()
+def get_prices():
+    prices = {}
+    response = get_prices_data()
+    try:
+        prices[config["token_weth"]] = response["ethereum"]["usd"]
+        prices[config["token_tether"]] = response["tether"]["usd"]
+        prices[config["token_usdc"]] = response["usd-coin"]["usd"]
+    except:
+        pass
+    return prices

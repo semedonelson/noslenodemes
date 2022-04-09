@@ -17,8 +17,8 @@ def run_query_post(query, url):
         return "Query failed. return code is {}. {}".format(response.status_code, query)
 
 
-def list_coingecko_tokens():
-    url = config["coingecko_tokens_list_url"]
-    r = requests.get(url, timeout=30)
-    j = json.loads(r.content.decode("utf-8"))
+def get_prices_data():
+    url = config["coingecko_prices_url"]
+    response = requests.get(url, timeout=10)
+    j = json.loads(response.content.decode("utf-8"))
     return j
