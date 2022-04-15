@@ -1,6 +1,7 @@
 import requests
 from brownie import config
 import json
+from scripts.classes import ethgasstation
 
 
 def run_query_post(query, url):
@@ -22,3 +23,17 @@ def get_prices_data():
     response = requests.get(url, timeout=10)
     j = json.loads(response.content.decode("utf-8"))
     return j
+
+
+def get_ethgasstation():
+    url = config["ethgasstation_url"]
+    response = requests.get(url, timeout=10)
+    j = json.loads(response.content.decode("utf-8"))
+    gas = ethgasstation(
+        int(j["fast"]),
+        int(j["fastest"]),
+        int(j["safeLow"]),
+        int(j["average"]),
+    )
+
+    return gas

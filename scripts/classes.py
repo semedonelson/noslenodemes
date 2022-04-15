@@ -113,3 +113,11 @@ class tokens_coingecko_price:
         self.id = id
         self.symbol = symbol
         self.usdPrice = usdPrice
+
+
+class ethgasstation:
+    def __init__(self, fast, fastest, safeLow, average):
+        self.fast = fast
+        self.fastest = fastest
+        self.safeLow = safeLow
+        self.average = average
