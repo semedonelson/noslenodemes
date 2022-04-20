@@ -14,7 +14,7 @@ from scripts.classes import (
     ObjectEncoder,
     dex_pair_info,
     dex_pair_final,
-    ethgasstation,
+    ethgasoracle,
 )
 import json
 from json import JSONEncoder
@@ -29,7 +29,6 @@ import random
 from queue import Queue
 from decimal import Decimal
 import traceback
-import statistics
 
 # Global variables
 MOST_TRADED_PAIRS_LIST = []
@@ -37,6 +36,7 @@ LESS_TRADED_PAIRS_LIST = []
 DEX_INFO_LIST = []
 PRICES = {}
 GAS = 0.0
+SUGGEST_BASE_FEE = 0.0
 # Queues
 queue_dex_info = Queue()
 queue_most_traded_pairs = Queue()
@@ -493,21 +493,25 @@ def check_profitability(dex_pair_final_list):
 def fill_prices_info():
     global PRICES
     global GAS
+    global SUGGEST_BASE_FEE
     while True:
         # Prices
         pr = get_prices()
         if len(pr) > 0:
             PRICES = pr
         # Gas
-        gas_station = get_gas()
+        gas_oracle = get_gas()
         if config["gas_type"] == "fast":
-            GAS = gas_station.fast
-        elif config["gas_type"] == "fastest":
-            GAS = gas_station.fastest
-        elif config["gas_type"] == "safeLow":
-            GAS = gas_station.safeLow
-        elif config["gas_type"] == "average":
-            GAS = gas_station.average
+            GAS = gas_oracle.fastGasPrice
+        elif config["gas_type"] == "propose":
+            GAS = gas_oracle.proposeGasPrice
+        elif config["gas_type"] == "safe":
+            GAS = gas_oracle.safeGasPrice
+        else:
+            GAS = gas_oracle.fastGasPrice
+
+        SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
+        # to remove
         break
         # sleep
         time.sleep(int(config["coingecko_prices_refresh_seconds"]))
@@ -522,7 +526,7 @@ def swap_gas_cost(
 ):
     flas_swap = FlashSwap[-1]
     account = get_account()
-    total_block_number = web3.eth.blockNumber + 2
+    total_block_number = web3.eth.block_number + 2
 
     web3_flas_swap = web3.eth.contract(address=flas_swap.address, abi=flas_swap.abi)
     estimated_gas = web3_flas_swap.functions.start(
@@ -567,34 +571,45 @@ def get_amount_usd_value(token_borrow, amount, reserve0, reserve1, token0, token
 
 def execution_cost(estimated_gas, profit):
     global GAS
+    global SUGGEST_BASE_FEE
     global PRICES
-    final_gas = Decimal(GAS)
+    max_priority_fee = Decimal(GAS) - Decimal(SUGGEST_BASE_FEE)
+    base_fee_per_gas = Decimal(GAS) * Decimal(config["base_fee_multiplier"])
+
     if profit < Decimal(config["profit_level1"]):
-        final_gas = Decimal(GAS) * max(
-            Decimal(1.0), Decimal(config["profit_level1_gas_multiplier"])
+        max_priority_fee = max_priority_fee * max(
+            Decimal(1.0), Decimal(config["profit_level1_priority_feed_multiplier"])
         )
     elif profit < Decimal(config["profit_level2"]):
-        final_gas = Decimal(GAS) * max(
-            Decimal(1.0), Decimal(config["profit_level2_gas_multiplier"])
+        max_priority_fee = max_priority_fee * max(
+            Decimal(1.0), Decimal(config["profit_level2_priority_feed_multiplier"])
         )
     elif profit < Decimal(config["profit_level3"]):
-        final_gas = Decimal(GAS) * max(
-            Decimal(1.0), Decimal(config["profit_level3_gas_multiplier"])
+        max_priority_fee = max_priority_fee * max(
+            Decimal(1.0), Decimal(config["profit_level3_priority_feed_multiplier"])
         )
     elif profit < Decimal(config["profit_level4"]):
-        final_gas = Decimal(GAS) * max(
-            Decimal(1.0), Decimal(config["profit_level4_gas_multiplier"])
+        max_priority_fee = max_priority_fee * max(
+            Decimal(1.0), Decimal(config["profit_level4_priority_feed_multiplier"])
         )
     else:
-        final_gas = Decimal(GAS) * max(
-            Decimal(1.0), Decimal(config["profit_level_other_gas_multiplier"])
+        max_priority_fee = max_priority_fee * max(
+            Decimal(1.0), Decimal(config["profit_level_other_priority_feed_multiplier"])
         )
-
-    gas_wei = Decimal(final_gas) * (Decimal(10) ** 8)
-    gas_ether = web3.fromWei(gas_wei, "ether")
+    max_base_fee_per_gas = base_fee_per_gas + max_priority_fee
+    max_base_fee_per_gas_wei = int(Decimal(max_base_fee_per_gas) * (Decimal(10) ** 9))
+    max_base_fee_per_gas_ether = web3.fromWei(max_base_fee_per_gas_wei, "ether")
     eth_price = Decimal(PRICES[config["token_weth"].lower()])
-    cost = round((gas_ether * eth_price) * estimated_gas, 2)
-    return final_gas, cost
+    cost = (eth_price * max_base_fee_per_gas_ether) * estimated_gas
+
+    return (
+        max_base_fee_per_gas,
+        max_priority_fee,
+        max_base_fee_per_gas_wei,
+        max_base_fee_per_gas_ether,
+        eth_price,
+        cost,
+    )
 
 
 def tst_fill_prices_info():
@@ -607,7 +622,25 @@ def tst_fill_prices_info():
 
 
 def test():
-    pass
+    global GAS
+    global SUGGEST_BASE_FEE
+    fill_prices_info()
+    (
+        max_base_fee_per_gas,
+        max_priority_fee,
+        max_base_fee_per_gas_wei,
+        max_base_fee_per_gas_ether,
+        eth_price,
+        cost,
+    ) = execution_cost(298750, 100)
+    print(f"GAS: {GAS} SUGGEST_BASE_FEE: {SUGGEST_BASE_FEE}")
+    print(
+        f"max_base_fee: {max_base_fee_per_gas} max_priority_fee: {max_priority_fee} max_base_fee_per_gas_wei: {max_base_fee_per_gas_wei} max_base_fee_per_gas_ether: {max_base_fee_per_gas_ether} eth_price: {eth_price} cost: {cost}"
+    )
+
+
+def main():
+    test()
 
 
 def main2():
@@ -692,7 +725,7 @@ def main1():
     """
 
 
-def main():
+def main0():
     deploy_watcher()
     deploy_flash_swap()
     with concurrent.futures.ThreadPoolExecutor() as executor:

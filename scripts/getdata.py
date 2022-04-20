@@ -1,7 +1,8 @@
 import requests
 from brownie import config
 import json
-from scripts.classes import ethgasstation
+from scripts.classes import ethgasoracle
+from decimal import Decimal
 
 
 def run_query_post(query, url):
@@ -25,15 +26,15 @@ def get_prices_data():
     return j
 
 
-def get_ethgasstation():
-    url = config["ethgasstation_url"]
+def get_ethgasoracle():
+    url = config["gasoracle_url"]
     response = requests.get(url, timeout=10)
     j = json.loads(response.content.decode("utf-8"))
-    gas = ethgasstation(
-        int(j["fast"]),
-        int(j["fastest"]),
-        int(j["safeLow"]),
-        int(j["average"]),
+    gas = ethgasoracle(
+        int(j["result"]["FastGasPrice"]),
+        int(j["result"]["ProposeGasPrice"]),
+        int(j["result"]["SafeGasPrice"]),
+        Decimal(j["result"]["suggestBaseFee"]),
     )
 
     return gas

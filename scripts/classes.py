@@ -115,9 +115,9 @@ class tokens_coingecko_price:
         self.usdPrice = usdPrice
 
 
-class ethgasstation:
-    def __init__(self, fast, fastest, safeLow, average):
-        self.fast = fast
-        self.fastest = fastest
-        self.safeLow = safeLow
-        self.average = average
+class ethgasoracle:
+    def __init__(self, fastGasPrice, proposeGasPrice, safeGasPrice, suggestBaseFee):
+        self.fastGasPrice = fastGasPrice
+        self.proposeGasPrice = proposeGasPrice
+        self.safeGasPrice = safeGasPrice
+        self.suggestBaseFee = suggestBaseFee

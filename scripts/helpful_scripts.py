@@ -1,6 +1,6 @@
 from brownie import config, network, accounts
-from scripts.classes import oracle_data, ObjectEncoder, pair, dex, ethgasstation
-from scripts.getdata import run_query_post, get_prices_data, get_ethgasstation
+from scripts.classes import oracle_data, ObjectEncoder, pair, dex, ethgasoracle
+from scripts.getdata import run_query_post, get_prices_data, get_ethgasoracle
 import csv
 import json
 from json import JSONEncoder
@@ -215,5 +215,5 @@ def get_prices():
 
 
 def get_gas():
-    gas = get_ethgasstation()
+    gas = get_ethgasoracle()
     return gas
