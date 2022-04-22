@@ -6,7 +6,7 @@ compiler:
       - '@openzeppelin=OpenZeppelin/openzeppelin-contracts@3.4.0'
 dotenv: .env
 liquidity_pairs_list_percentage: 25
-dex_info_process_cicle_minutes: 120
+dex_info_process_cicle_minutes: 240
 percentage_amount_to_use: 80
 coingecko_prices_url: "https://api.coingecko.com/api/v3/simple/price?ids=ethereum,tether,usd-coin&vs_currencies=usd"
 gasoracle_url: "https://api.etherscan.io/api?module=gastracker&action=gasoracle&apikey=76EIAGPFFB8GNK9Z8IGEAN85DMZER3DMN4"
@@ -15,8 +15,10 @@ token_tether: "0xdac17f958d2ee523a2206206994597c13d831ec7"
 token_usdc: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 gas_type: "fast"
 base_fee_multiplier: 2.0
+gas_limit_start_swap: 330000
 coingecko_prices_refresh_seconds: 20
 token_value_min_threshould: 1000.00
+remove_min_threshould_pairs: False
 profit_level1: 1000.00
 profit_level2: 10000.00
 profit_level3: 50000.00
@@ -26,7 +28,7 @@ profit_level2_priority_feed_multiplier: 2.50
 profit_level3_priority_feed_multiplier: 3.00
 profit_level4_priority_feed_multiplier: 3.50
 profit_level_other_priority_feed_multiplier: 4.00
-swap_estimated_gas: 298750
+use_multithreads_for_sending_swaps: False
 networks:
   default: mainnet-fork
   development:

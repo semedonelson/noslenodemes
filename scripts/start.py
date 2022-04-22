@@ -118,54 +118,65 @@ def dex_info_processor():
             )
         print("Processing pairs ....")
         final_dex_pairs_list = get_dex_pairs_list(dex_info)
-        lst_total = len(final_dex_pairs_list)
-        print(
-            f"Start preparing to remove list from 'less then thresould' pairs. Total: {lst_total}"
-        )
-        try:
-            dex_pairs_list_itens_to_remove = []
-            for itens_list in final_dex_pairs_list:
-                less_them_thresould = False
-                for item in itens_list:
-                    reserve0 = 0
-                    reserve1 = 0
-                    try:
-                        reserve0, reserve1 = watcher.getReservers(item.pair_id)
-                    except:
-                        continue
-                    token0_value_usd = get_amount_usd_value(
-                        item.token0["id"].lower(),
-                        Decimal(reserve0) / Decimal(10 ** int(item.token0["decimals"])),
-                        Decimal(reserve0) / Decimal(10 ** int(item.token0["decimals"])),
-                        Decimal(reserve1) / Decimal(10 ** int(item.token1["decimals"])),
-                        item.token0["id"].lower(),
-                        item.token1["id"].lower(),
-                    )
-                    if token0_value_usd < Decimal(config["token_value_min_threshould"]):
-                        less_them_thresould = True
-                    token1_value_usd = get_amount_usd_value(
-                        item.token1["id"].lower(),
-                        Decimal(reserve1) / Decimal(10 ** int(item.token1["decimals"])),
-                        Decimal(reserve0) / Decimal(10 ** int(item.token0["decimals"])),
-                        Decimal(reserve1) / Decimal(10 ** int(item.token1["decimals"])),
-                        item.token0["id"].lower(),
-                        item.token1["id"].lower(),
-                    )
-                    if token1_value_usd < Decimal(config["token_value_min_threshould"]):
-                        less_them_thresould = True
-                    if less_them_thresould == True:
-                        dex_pairs_list_itens_to_remove.append(item)
-        except:
-            pass
-        # remove less then thresould pair in the final list
-        for itens_list_to_rm in dex_pairs_list_itens_to_remove:
-            for itens_list in final_dex_pairs_list:
-                if (
-                    itens_list_to_rm.pair_id == itens_list[0].pair_id
-                    or itens_list_to_rm.pair_id == itens_list[1].pair_id
-                ):
-                    final_dex_pairs_list.remove(itens_list)
-                    break
+        if bool(config["remove_min_threshould_pairs"]):
+            lst_total = len(final_dex_pairs_list)
+            print(
+                f"Start preparing to remove list from 'less then thresould' pairs. Total: {lst_total}"
+            )
+            try:
+                dex_pairs_list_itens_to_remove = []
+                for itens_list in final_dex_pairs_list:
+                    less_them_thresould = False
+                    for item in itens_list:
+                        reserve0 = 0
+                        reserve1 = 0
+                        try:
+                            reserve0, reserve1 = watcher.getReservers(item.pair_id)
+                        except:
+                            continue
+                        token0_value_usd = get_amount_usd_value(
+                            item.token0["id"].lower(),
+                            Decimal(reserve0)
+                            / Decimal(10 ** int(item.token0["decimals"])),
+                            Decimal(reserve0)
+                            / Decimal(10 ** int(item.token0["decimals"])),
+                            Decimal(reserve1)
+                            / Decimal(10 ** int(item.token1["decimals"])),
+                            item.token0["id"].lower(),
+                            item.token1["id"].lower(),
+                        )
+                        if token0_value_usd < Decimal(
+                            config["token_value_min_threshould"]
+                        ):
+                            less_them_thresould = True
+                        token1_value_usd = get_amount_usd_value(
+                            item.token1["id"].lower(),
+                            Decimal(reserve1)
+                            / Decimal(10 ** int(item.token1["decimals"])),
+                            Decimal(reserve0)
+                            / Decimal(10 ** int(item.token0["decimals"])),
+                            Decimal(reserve1)
+                            / Decimal(10 ** int(item.token1["decimals"])),
+                            item.token0["id"].lower(),
+                            item.token1["id"].lower(),
+                        )
+                        if token1_value_usd < Decimal(
+                            config["token_value_min_threshould"]
+                        ):
+                            less_them_thresould = True
+                        if less_them_thresould == True:
+                            dex_pairs_list_itens_to_remove.append(item)
+            except:
+                pass
+            # remove less then thresould pair in the final list
+            for itens_list_to_rm in dex_pairs_list_itens_to_remove:
+                for itens_list in final_dex_pairs_list:
+                    if (
+                        itens_list_to_rm.pair_id == itens_list[0].pair_id
+                        or itens_list_to_rm.pair_id == itens_list[1].pair_id
+                    ):
+                        final_dex_pairs_list.remove(itens_list)
+                        break
         queue_dex_pair_final_list.put(final_dex_pairs_list)
         most_traded_dex_pairs_list, less_traded_dex_pairs_list = list_divide(
             final_dex_pairs_list
@@ -333,8 +344,14 @@ def execute_most_traded_pairs():
             list_most_traded_pairs = queue_most_traded_pairs.get_nowait()
         except:
             pass
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            executor.map(check_profitability, list_most_traded_pairs)
+
+        if bool(config["use_multithreads_for_sending_swaps"]):
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                executor.map(check_profitability, list_most_traded_pairs)
+        else:
+            for dex_pair_final_list in list_most_traded_pairs:
+                check_profitability(dex_pair_final_list)
+
         end = time.perf_counter()
         total = round(end - start, 2)
         if len(list_most_traded_pairs) > 0:
@@ -352,8 +369,14 @@ def execute_less_traded_pairs():
             list_less_traded_pairs = queue_less_traded_pairs.get_nowait()
         except:
             pass
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            executor.map(check_profitability, list_less_traded_pairs)
+
+        if bool(config["use_multithreads_for_sending_swaps"]):
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                executor.map(check_profitability, list_less_traded_pairs)
+        else:
+            for dex_pair_final_list in list_less_traded_pairs:
+                check_profitability(dex_pair_final_list)
+
         end = time.perf_counter()
         total = round(end - start, 2)
         if len(list_less_traded_pairs) > 0:
@@ -396,6 +419,7 @@ def check_profitability(dex_pair_final_list):
                     _amountTokenPay = amountOut
                     _sourceRouter = _dex_pair_final.routers[0]
                     _targetRouter = _dex_pair_final.routers[1]
+                    """
                     swap_gas_cost(
                         _pairAddress,
                         _tokenBorrow,
@@ -403,6 +427,7 @@ def check_profitability(dex_pair_final_list):
                         _sourceRouter,
                         _targetRouter,
                     )
+                    """
                     _amountProfit_d = Decimal(profit) / Decimal(
                         10 ** int(_dex_pair_final.decimals[0])
                     )
@@ -423,21 +448,35 @@ def check_profitability(dex_pair_final_list):
                         ),
                         2,
                     )
-                    final_gas, exec_cost_usd = execution_cost(
-                        int(config["swap_estimated_gas"]), gross_profit_usd
-                    )
+                    (
+                        max_base_fee_per_gas,
+                        max_priority_fee,
+                        exec_cost_usd,
+                        gas_limit,
+                    ) = execution_cost(gross_profit_usd)
                     net_profit_usd = round(gross_profit_usd - exec_cost_usd, 2)
-                    if net_profit > 0:
+                    if net_profit_usd > 0:
                         print(
-                            f"gross_profit_usd: {gross_profit_usd} net_profit_usd: {net_profit_usd} final_gas: {final_gas}"
+                            f"Profit found: pair: {_pairAddress} token to borrow: {_tokenBorrow} amount: {_amountTokenPay} net profit USD: {net_profit_usd}"
                         )
-                        # check_profitability(dex_pair_final_list)
+                        start_swap(
+                            _pairAddress,
+                            _tokenBorrow,
+                            _amountTokenPay,
+                            _sourceRouter,
+                            _targetRouter,
+                            gas_limit,
+                            max_base_fee_per_gas,
+                            max_priority_fee,
+                        )
+                        check_profitability(dex_pair_final_list)
                 elif result[0] == _dex_pair_final.tokens[1]:
                     _pairAddress = _dex_pair_final.pairs_id[1]
                     _tokenBorrow = _dex_pair_final.tokens[1]
                     _amountTokenPay = amountOut
                     _sourceRouter = _dex_pair_final.routers[1]
                     _targetRouter = _dex_pair_final.routers[0]
+                    """
                     swap_gas_cost(
                         _pairAddress,
                         _tokenBorrow,
@@ -445,6 +484,7 @@ def check_profitability(dex_pair_final_list):
                         _sourceRouter,
                         _targetRouter,
                     )
+                    """
                     _amountProfit_d = Decimal(profit) / Decimal(
                         10 ** int(_dex_pair_final.decimals[1])
                     )
@@ -465,15 +505,28 @@ def check_profitability(dex_pair_final_list):
                         ),
                         2,
                     )
-                    final_gas, exec_cost_usd = execution_cost(
-                        int(config["swap_estimated_gas"]), gross_profit_usd
-                    )
+                    (
+                        max_base_fee_per_gas,
+                        max_priority_fee,
+                        exec_cost_usd,
+                        gas_limit,
+                    ) = execution_cost(gross_profit_usd)
                     net_profit_usd = round(gross_profit_usd - exec_cost_usd, 2)
-                    if net_profit > 0:
+                    if net_profit_usd > 0:
                         print(
-                            f"gross_profit_usd: {gross_profit_usd} net_profit_usd: {net_profit_usd} final_gas: {final_gas}"
+                            f"Profit found: pair: {_pairAddress} token to borrow: {_tokenBorrow} amount: {_amountTokenPay} net profit USD: {net_profit_usd}"
                         )
-                        # check_profitability(dex_pair_final_list)
+                        start_swap(
+                            _pairAddress,
+                            _tokenBorrow,
+                            _amountTokenPay,
+                            _sourceRouter,
+                            _targetRouter,
+                            gas_limit,
+                            max_base_fee_per_gas,
+                            max_priority_fee,
+                        )
+                        check_profitability(dex_pair_final_list)
         except:
             error = traceback.format_exc()
             print(
@@ -569,7 +622,7 @@ def get_amount_usd_value(token_borrow, amount, reserve0, reserve1, token0, token
     return usd_price
 
 
-def execution_cost(estimated_gas, profit):
+def execution_cost(profit):
     global GAS
     global SUGGEST_BASE_FEE
     global PRICES
@@ -600,15 +653,15 @@ def execution_cost(estimated_gas, profit):
     max_base_fee_per_gas_wei = int(Decimal(max_base_fee_per_gas) * (Decimal(10) ** 9))
     max_base_fee_per_gas_ether = web3.fromWei(max_base_fee_per_gas_wei, "ether")
     eth_price = Decimal(PRICES[config["token_weth"].lower()])
-    cost = (eth_price * max_base_fee_per_gas_ether) * estimated_gas
+    gas_limit = int(config["gas_limit_start_swap"])
+    cost = (eth_price * max_base_fee_per_gas_ether) * gas_limit
+    latest_block = web3.eth.getBlock("latest")
 
     return (
-        max_base_fee_per_gas,
-        max_priority_fee,
-        max_base_fee_per_gas_wei,
-        max_base_fee_per_gas_ether,
-        eth_price,
-        cost,
+        int(max_base_fee_per_gas),
+        int(max_priority_fee),
+        round(cost, 2),
+        gas_limit,
     )
 
 
@@ -621,6 +674,44 @@ def tst_fill_prices_info():
     GAS = get_gas()
 
 
+def start_swap(
+    pairAddress,
+    tokenBorrow,
+    amountTokenPay,
+    sourceRouter,
+    targetRouter,
+    gasLimit,
+    maxFeePerGas,
+    maxPriorityFeePerGas,
+):
+    flash_swap = FlashSwap[-1]
+    account = get_account()
+    total_block_number = web3.eth.block_number + 2
+    try:
+        swap_trx = flash_swap.start(
+            total_block_number,
+            pairAddress,
+            tokenBorrow,
+            amountTokenPay,
+            sourceRouter,
+            targetRouter,
+            {
+                "from": account,
+                "gasLimit": gasLimit,
+                "maxFeePerGas": maxFeePerGas,
+                "maxPriorityFeePerGas": maxPriorityFeePerGas,
+            },
+        )
+        swap_trx.wait(1)
+    except:
+        error = traceback.format_exc()
+        print(
+            "Error executing swap. Error: ",
+            error,
+        )
+    print(f"Profit for pair {pairAddress} executed.")
+
+
 def test():
     global GAS
     global SUGGEST_BASE_FEE
@@ -628,14 +719,12 @@ def test():
     (
         max_base_fee_per_gas,
         max_priority_fee,
-        max_base_fee_per_gas_wei,
-        max_base_fee_per_gas_ether,
-        eth_price,
         cost,
-    ) = execution_cost(298750, 100)
+        gas_limit,
+    ) = execution_cost(100000)
     print(f"GAS: {GAS} SUGGEST_BASE_FEE: {SUGGEST_BASE_FEE}")
     print(
-        f"max_base_fee: {max_base_fee_per_gas} max_priority_fee: {max_priority_fee} max_base_fee_per_gas_wei: {max_base_fee_per_gas_wei} max_base_fee_per_gas_ether: {max_base_fee_per_gas_ether} eth_price: {eth_price} cost: {cost}"
+        f"max_base_fee: {max_base_fee_per_gas} max_priority_fee: {max_priority_fee} cost: {cost} gas_limit: {gas_limit}"
     )
 
 
@@ -725,15 +814,24 @@ def main1():
     """
 
 
-def main0():
+def no_multithreads_sending_swaps():
+    while True:
+        execute_most_traded_pairs()
+        execute_less_traded_pairs()
+
+
+def main():
     deploy_watcher()
     deploy_flash_swap()
     with concurrent.futures.ThreadPoolExecutor() as executor:
         prices = executor.submit(fill_prices_info)
         dx_list = executor.submit(fill_dex_info)
         dx_proc = executor.submit(dex_info_processor)
-        lst_most_traded = executor.submit(execute_most_traded_pairs)
-        lst_less_traded = executor.submit(execute_less_traded_pairs)
+        if bool(config["use_multithreads_for_sending_swaps"]):
+            lst_most_traded = executor.submit(execute_most_traded_pairs)
+            lst_less_traded = executor.submit(execute_less_traded_pairs)
+        else:
+            exec_swaps = executor.submit(no_multithreads_sending_swaps)
         print(
             dx_list.result(),
             dx_proc.result(),
