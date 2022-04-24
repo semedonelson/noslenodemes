@@ -33,6 +33,7 @@ import traceback
 # Global variables
 MOST_TRADED_PAIRS_LIST = []
 LESS_TRADED_PAIRS_LIST = []
+PAIRS_LIST_TO_REMOVE = []
 DEX_INFO_LIST = []
 PRICES = {}
 GAS = 0.0
@@ -116,6 +117,7 @@ def dex_info_processor():
             print(
                 f"Dex Name: {d.name} \nFactory: {d.factory} \nRouter: {d.router} \nDefault Token: {d.default_token} \nPairs: {size} \nGraph: {d.use_graph}"
             )
+        print("--------------------------------------------------")
         print("Processing pairs ....")
         final_dex_pairs_list = get_dex_pairs_list(dex_info)
         if bool(config["remove_min_threshould_pairs"]):
@@ -345,12 +347,8 @@ def execute_most_traded_pairs():
         except:
             pass
 
-        if bool(config["use_multithreads_for_sending_swaps"]):
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                executor.map(check_profitability, list_most_traded_pairs)
-        else:
-            for dex_pair_final_list in list_most_traded_pairs:
-                check_profitability(dex_pair_final_list)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            executor.map(check_profitability, list_most_traded_pairs)
 
         end = time.perf_counter()
         total = round(end - start, 2)
@@ -370,12 +368,8 @@ def execute_less_traded_pairs():
         except:
             pass
 
-        if bool(config["use_multithreads_for_sending_swaps"]):
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                executor.map(check_profitability, list_less_traded_pairs)
-        else:
-            for dex_pair_final_list in list_less_traded_pairs:
-                check_profitability(dex_pair_final_list)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            executor.map(check_profitability, list_less_traded_pairs)
 
         end = time.perf_counter()
         total = round(end - start, 2)
@@ -419,17 +413,8 @@ def check_profitability(dex_pair_final_list):
                     _amountTokenPay = amountOut
                     _sourceRouter = _dex_pair_final.routers[0]
                     _targetRouter = _dex_pair_final.routers[1]
-                    """
-                    swap_gas_cost(
-                        _pairAddress,
-                        _tokenBorrow,
-                        _amountTokenPay,
-                        _sourceRouter,
-                        _targetRouter,
-                    )
-                    """
                     _amountProfit_d = Decimal(profit) / Decimal(
-                        10 ** int(_dex_pair_final.decimals[0])
+                        10 ** int(_dex_pair_final.decimals[1])
                     )
                     reserve0_d = Decimal(dex0_reserve0) / Decimal(
                         10 ** int(_dex_pair_final.decimals[0])
@@ -454,12 +439,15 @@ def check_profitability(dex_pair_final_list):
                         exec_cost_usd,
                         gas_limit,
                     ) = execution_cost(gross_profit_usd)
-                    net_profit_usd = round(gross_profit_usd - exec_cost_usd, 2)
+                    net_profit_usd = round(
+                        Decimal(gross_profit_usd) - Decimal(exec_cost_usd), 2
+                    )
                     if net_profit_usd > 0:
                         print(
                             f"Profit found: pair: {_pairAddress} token to borrow: {_tokenBorrow} amount: {_amountTokenPay} net profit USD: {net_profit_usd}"
                         )
                         start_swap(
+                            dex_pair_final_list,
                             _pairAddress,
                             _tokenBorrow,
                             _amountTokenPay,
@@ -469,24 +457,14 @@ def check_profitability(dex_pair_final_list):
                             max_base_fee_per_gas,
                             max_priority_fee,
                         )
-                        check_profitability(dex_pair_final_list)
                 elif result[0] == _dex_pair_final.tokens[1]:
                     _pairAddress = _dex_pair_final.pairs_id[1]
                     _tokenBorrow = _dex_pair_final.tokens[1]
                     _amountTokenPay = amountOut
                     _sourceRouter = _dex_pair_final.routers[1]
                     _targetRouter = _dex_pair_final.routers[0]
-                    """
-                    swap_gas_cost(
-                        _pairAddress,
-                        _tokenBorrow,
-                        _amountTokenPay,
-                        _sourceRouter,
-                        _targetRouter,
-                    )
-                    """
                     _amountProfit_d = Decimal(profit) / Decimal(
-                        10 ** int(_dex_pair_final.decimals[1])
+                        10 ** int(_dex_pair_final.decimals[0])
                     )
                     reserve0_d = Decimal(dex1_reserve0) / Decimal(
                         10 ** int(_dex_pair_final.decimals[0])
@@ -511,12 +489,15 @@ def check_profitability(dex_pair_final_list):
                         exec_cost_usd,
                         gas_limit,
                     ) = execution_cost(gross_profit_usd)
-                    net_profit_usd = round(gross_profit_usd - exec_cost_usd, 2)
+                    net_profit_usd = round(
+                        Decimal(gross_profit_usd) - Decimal(exec_cost_usd), 2
+                    )
                     if net_profit_usd > 0:
                         print(
                             f"Profit found: pair: {_pairAddress} token to borrow: {_tokenBorrow} amount: {_amountTokenPay} net profit USD: {net_profit_usd}"
                         )
                         start_swap(
+                            dex_pair_final_list,
                             _pairAddress,
                             _tokenBorrow,
                             _amountTokenPay,
@@ -526,7 +507,6 @@ def check_profitability(dex_pair_final_list):
                             max_base_fee_per_gas,
                             max_priority_fee,
                         )
-                        check_profitability(dex_pair_final_list)
         except:
             error = traceback.format_exc()
             print(
@@ -675,6 +655,7 @@ def tst_fill_prices_info():
 
 
 def start_swap(
+    dex_pair_final_list,
     pairAddress,
     tokenBorrow,
     amountTokenPay,
@@ -703,13 +684,52 @@ def start_swap(
             },
         )
         swap_trx.wait(1)
+        check_profitability(dex_pair_final_list)
+        print(f"Profit for pair {pairAddress} executed.")
     except:
         error = traceback.format_exc()
         print(
             "Error executing swap. Error: ",
             error,
         )
-    print(f"Profit for pair {pairAddress} executed.")
+        # remove from list
+        errors = config["list_errors_to_remove_pairs"].split(";")
+        for er in errors:
+            if error.find(er) != -1:
+                try:
+                    PAIRS_LIST_TO_REMOVE.append(dex_pair_final_list)
+                except:
+                    pass
+                break
+
+
+def remove_pairs_with_errors(global_list, list_to_remove):
+    list_removed = []
+    try:
+        for itens_list_to_rm in list_to_remove:
+            for item_list in global_list:
+                if (
+                    itens_list_to_rm[0].pairs_id[0] == item_list[0].pairs_id[0]
+                    and itens_list_to_rm[0].pairs_id[1] == item_list[0].pairs_id[1]
+                ):
+                    global_list.remove(item_list)
+                    list_removed.append(itens_list_to_rm)
+                    print("item removed from the list")
+                    break
+
+        for itn in list_removed:
+            for itens_list_to_rm in list_to_remove:
+                if (
+                    itn[0].pairs_id[0] == itens_list_to_rm[0].pairs_id[0]
+                    and itn[0].pairs_id[1] == itens_list_to_rm[0].pairs_id[1]
+                ):
+                    list_to_remove.remove(itens_list_to_rm)
+                    break
+    except:
+        error = traceback.format_exc()
+        print("remove_pairs_with_errors error ", error)
+
+    return global_list, list_to_remove
 
 
 def test():
@@ -728,51 +748,87 @@ def test():
     )
 
 
-def main():
+def main3():
     test()
 
 
 def main2():
-    fill_prices_info()
-    execution_cost(298750, 511100)
-    """
-    deploy_watcher()
-    watcher = ChainWatcher[-1]
-    reserve0, reserve1 = watcher.getReservers(
-        "0x2a449a6076001080c833324bb7a3dcd017f15548"
+    deploy_flash_swap()
+    start_swap(
+        [],
+        "0x04039c93768e872c469ed1e8a6a199ad90e56206",
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        1226392,
+        "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+        "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
+        300000,
+        200,
+        10,
     )
-    token0_value_usd = get_amount_usd_value(
-        "0xc4a11aaf6ea915ed7ac194161d2fc9384f15bff2",
-        Decimal(reserve1) / Decimal(10**18),
-        Decimal(reserve0) / Decimal(10**18),
-        Decimal(reserve1) / Decimal(10**18),
-        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-        "0xc4a11aaf6ea915ed7ac194161d2fc9384f15bff2",
-    )
-    print(
-        f"reserve0: {reserve0} reserve1: {reserve1} token0_value_usd: {token0_value_usd}"
-    )
-    """
 
 
 def main1():
     print("Starting main!")
-    """
-    tst_fill_prices_info()
-    token1_value_usd = get_amount_usd_value(
-        "0xaa6e8127831c9de45ae56bb1b0d4d4da6e5665bd".lower(),
-        10646.953053933111744658,
-        10646.953053933111744658,
-        295.056394316568445886,
-        "0xaa6e8127831c9de45ae56bb1b0d4d4da6e5665bd".lower(),
-        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".lower(),
+    watcher, account = deploy_watcher()
+    deploy_flash_swap()
+    dex0_reserve0, dex0_reserve1 = watcher.getReservers(
+        "0x04039c93768e872c469ed1e8a6a199ad90e56206"
     )
-    print(f"token1_value_usd: {token1_value_usd}")
-    """
-    deploy_watcher()
-    tst_fill_prices_info()
-    fill_dex_info()
-    dex_info_processor()
+    dex1_reserve0, dex1_reserve1 = watcher.getReservers(
+        "0xb9e4b63716252ec73dc43c545bfd58d18f040251"
+    )
+    print(
+        f"dex0_reserve0: {dex0_reserve0} dex0_reserve1: {dex0_reserve1} dex1_reserve0: {dex1_reserve0} dex1_reserve1: {dex1_reserve1}"
+    )
+    reserve0 = int(
+        (int(config["percentage_amount_to_use"]) / 100)
+        * min(dex0_reserve0, dex1_reserve0)
+    )
+    reserve1 = int(
+        (int(config["percentage_amount_to_use"]) / 100)
+        * min(dex0_reserve1, dex1_reserve1)
+    )
+    print(f"reserve0: {reserve0} reserve1: {reserve1}")
+    tokens = []
+    tokens.append("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
+    tokens.append("0xb220d53f7d0f52897bcf25e47c4c3dc0bac344f8")
+    amounts = []
+    amounts.append(reserve0)
+    amounts.append(reserve1)
+    routers = []
+    routers.append("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
+    routers.append("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
+    pairs = []
+    pairs.append("0x04039c93768e872c469ed1e8a6a199ad90e56206")
+    pairs.append("0xb9e4b63716252ec73dc43c545bfd58d18f040251")
+    profit, amountOut, result = watcher.validate(
+        tokens,
+        amounts,
+        routers,
+        pairs,
+        {"from": account},
+    )
+    print(
+        f"profit: {profit} amountOut: {amountOut} result0: {result[0]} result1: {result[1]}"
+    )
+    _pairAddress = "0x04039c93768e872c469ed1e8a6a199ad90e56206"
+    _tokenBorrow = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+    _amountTokenPay = 1226392
+    _sourceRouter = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+    _targetRouter = "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F"
+    gas_limit = 330000
+    max_base_fee_per_gas = 150
+    max_priority_fee = 10
+    start_swap(
+        _pairAddress,
+        _tokenBorrow,
+        _amountTokenPay,
+        _sourceRouter,
+        _targetRouter,
+        gas_limit,
+        max_base_fee_per_gas,
+        max_priority_fee,
+    )
     """
     watcher, account = deploy_watcher()
     deploy_flash_swap()
@@ -815,9 +871,52 @@ def main1():
 
 
 def no_multithreads_sending_swaps():
+    list_most_traded_pairs = []
+    list_less_traded_pairs = []
+    global PAIRS_LIST_TO_REMOVE
     while True:
-        execute_most_traded_pairs()
-        execute_less_traded_pairs()
+        try:
+            try:
+                list_most_traded_pairs = queue_most_traded_pairs.get_nowait()
+            except:
+                pass
+
+            if len(PAIRS_LIST_TO_REMOVE) > 0:
+                (
+                    list_most_traded_pairs,
+                    PAIRS_LIST_TO_REMOVE,
+                ) = remove_pairs_with_errors(
+                    list_most_traded_pairs, PAIRS_LIST_TO_REMOVE
+                )
+
+            if len(list_most_traded_pairs) > 0:
+                print("Start Executing Most Traded Pairs")
+            for dex_pair_final_list in list_most_traded_pairs:
+                check_profitability(dex_pair_final_list)
+            if len(list_most_traded_pairs) > 0:
+                print("End Executing Most Traded Pairs")
+            # ---------------------------------
+            if len(PAIRS_LIST_TO_REMOVE) > 0:
+                (
+                    list_less_traded_pairs,
+                    PAIRS_LIST_TO_REMOVE,
+                ) = remove_pairs_with_errors(
+                    list_less_traded_pairs, PAIRS_LIST_TO_REMOVE
+                )
+
+            try:
+                list_less_traded_pairs = queue_less_traded_pairs.get_nowait()
+            except:
+                pass
+            if len(list_less_traded_pairs) > 0:
+                print("Start Executing Less Traded Pairs")
+            for dex_pair_final_list in list_less_traded_pairs:
+                check_profitability(dex_pair_final_list)
+            if len(list_less_traded_pairs) > 0:
+                print("End Executing Less Traded Pairs")
+        except:
+            error = traceback.format_exc()
+            print("Error: ", error)
 
 
 def main():
@@ -843,7 +942,5 @@ def main():
 
 if __name__ == "__main__":
     main()
-# https://rednafi.github.io/digressions/python/2020/04/21/python-concurrent-futures.html
-# https://www.adamsmith.haus/python/answers/how-to-use-a-global-variable-with-multiple-threads-in-python
-# https://www.adamsmith.haus/python/examples/4035/threading-share-a-global-variable-between-two-threads
+# https://docs.uniswap.org/protocol/V2/reference/smart-contracts/common-errors
 # web3_flas_swap.functions.start estimated_gas: 298750

@@ -64,7 +64,7 @@ def get_dex_data():
                     return_records = len(pairs)
                     # to remove
                     total += return_records
-                    print(f"total: {total}")
+                    print(f"Getting Pairs from {dex_name}. Total: {total}")
                     # add pair to the list
                     for pair in pairs:
                         pair["dailyVolumeUSD"] = 0

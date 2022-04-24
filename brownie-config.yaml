@@ -29,6 +29,7 @@ profit_level3_priority_feed_multiplier: 3.00
 profit_level4_priority_feed_multiplier: 3.50
 profit_level_other_priority_feed_multiplier: 4.00
 use_multithreads_for_sending_swaps: False
+list_errors_to_remove_pairs: "TRANSFER_FAILED;TRANSFER_FAILED"
 networks:
   default: mainnet-fork
   development:
