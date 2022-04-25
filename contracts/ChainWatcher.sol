@@ -7,8 +7,12 @@ import "../interfaces/IUniswapV2Pair.sol";
 import "../interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "../library/LowGasSafeMath.sol";
 
 contract ChainWatcher is Ownable {
+    using LowGasSafeMath for uint256;
+    using LowGasSafeMath for int256;
+
     constructor() public {}
 
     function getReservers(address pairAddress)
@@ -22,8 +26,7 @@ contract ChainWatcher is Ownable {
     function validate(
         address[] memory tokens,
         uint256[] memory amounts,
-        address[] memory routers,
-        address[] memory pairs
+        address[] memory routers
     )
         public
         view
@@ -84,9 +87,10 @@ contract ChainWatcher is Ownable {
                 1
             ]
             : 0;
-
         return (
-            int256(amountRepay - _amountTokenPay), // our profit or loss; example output: BNB amount
+            int256(
+                LowGasSafeMath.sub(int256(amountRepay), int256(_amountTokenPay))
+            ), // our profit or loss; example output: BNB amount
             amountOut // the amount we get from our input "_amountTokenPay"; example: BUSD amount
         );
     }

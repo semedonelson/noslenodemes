@@ -6,9 +6,12 @@ import "../interfaces/IUniswapV2Router02.sol";
 import "../interfaces/IUniswapV2Pair.sol";
 import "../interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IERC20.sol";
+import "../library/LowGasSafeMath.sol";
 
 contract FlashSwap {
     address public owner;
+    using LowGasSafeMath for uint256;
+    using LowGasSafeMath for int256;
 
     constructor() public {
         owner = msg.sender;
@@ -26,7 +29,7 @@ contract FlashSwap {
         uint256 _tokenBorrowAmount, // example: BUSD => 10 * 1e18 [Amountout]
         address _sourceRouter,
         address _targetRouter
-    ) external onlyOwner {
+    ) public onlyOwner {
         require(block.number <= _maxBlockNumber, "out of block");
 
         address token0 = IUniswapV2Pair(_pairAddress).token0();
@@ -50,7 +53,7 @@ contract FlashSwap {
         uint256 _amount0,
         uint256 _amount1,
         bytes memory _data
-    ) internal {
+    ) public {
         // obtain an amount of token that you exchanged
         uint256 amountToken = _amount0 == 0 ? _amount1 : _amount0;
 
@@ -103,7 +106,10 @@ contract FlashSwap {
 
         // transfer failing already have error message
         otherToken.transfer(msg.sender, amountRequired); // send back borrow
-        otherToken.transfer(owner, amountReceived - amountRequired); // our win
+        otherToken.transfer(
+            owner,
+            LowGasSafeMath.sub(amountReceived, amountRequired)
+        ); // our win
     }
 
     function uniswapV2Call(

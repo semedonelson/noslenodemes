@@ -29,6 +29,7 @@ import random
 from queue import Queue
 from decimal import Decimal
 import traceback
+from eth_abi import decode_single
 
 # Global variables
 MOST_TRADED_PAIRS_LIST = []
@@ -388,10 +389,22 @@ def check_profitability(dex_pair_final_list):
             (int(config["percentage_amount_to_use"]) / 100)
             * min(dex0_reserve0, dex1_reserve0)
         )
+        """
+        reserve0_top = int(
+            (int(config["top_percentage_amount_to_request"]) / 100)
+            * min(dex0_reserve0, dex1_reserve0)
+        )
+        """
         reserve1 = int(
             (int(config["percentage_amount_to_use"]) / 100)
             * min(dex0_reserve1, dex1_reserve1)
         )
+        """
+        reserve1_top = int(
+            (int(config["top_percentage_amount_to_request"]) / 100)
+            * min(dex0_reserve1, dex1_reserve1)
+        )
+        """
         amounts.append(reserve0)
         amounts.append(reserve1)
 
@@ -403,13 +416,18 @@ def check_profitability(dex_pair_final_list):
                 _dex_pair_final.tokens,
                 amounts,
                 _dex_pair_final.routers,
-                _dex_pair_final.pairs_id,
                 {"from": account},
             )
             if profit > 0:
                 if result[0] == _dex_pair_final.tokens[0]:
                     _pairAddress = _dex_pair_final.pairs_id[0]
                     _tokenBorrow = _dex_pair_final.tokens[0]
+                    """
+                    if amountOut > reserve0_top:
+                        reserve_percentage = Decimal((reserve0_top * 100) / amountOut)
+                        amountOut = reserve0_top
+                        profit = int(profit * (reserve_percentage / 100))
+                    """
                     _amountTokenPay = amountOut
                     _sourceRouter = _dex_pair_final.routers[0]
                     _targetRouter = _dex_pair_final.routers[1]
@@ -460,6 +478,12 @@ def check_profitability(dex_pair_final_list):
                 elif result[0] == _dex_pair_final.tokens[1]:
                     _pairAddress = _dex_pair_final.pairs_id[1]
                     _tokenBorrow = _dex_pair_final.tokens[1]
+                    """
+                    if amountOut > reserve1_top:
+                        reserve_percentage = Decimal((reserve1_top * 100) / amountOut)
+                        amountOut = reserve1_top
+                        profit = int(profit * (reserve_percentage / 100))
+                    """
                     _amountTokenPay = amountOut
                     _sourceRouter = _dex_pair_final.routers[1]
                     _targetRouter = _dex_pair_final.routers[0]
@@ -527,6 +551,7 @@ def fill_prices_info():
     global PRICES
     global GAS
     global SUGGEST_BASE_FEE
+    account = get_account()
     while True:
         # Prices
         pr = get_prices()
@@ -544,8 +569,7 @@ def fill_prices_info():
             GAS = gas_oracle.fastGasPrice
 
         SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
-        # to remove
-        break
+
         # sleep
         time.sleep(int(config["coingecko_prices_refresh_seconds"]))
 
@@ -648,10 +672,28 @@ def execution_cost(profit):
 def tst_fill_prices_info():
     global PRICES
     global GAS
+    global SUGGEST_BASE_FEE
+    # Prices
     pr = get_prices()
     if len(pr) > 0:
         PRICES = pr
-    GAS = get_gas()
+    # Gas
+    gas_oracle = get_gas()
+    if config["gas_type"] == "fast":
+        GAS = gas_oracle.fastGasPrice
+    elif config["gas_type"] == "propose":
+        GAS = gas_oracle.proposeGasPrice
+    elif config["gas_type"] == "safe":
+        GAS = gas_oracle.safeGasPrice
+    else:
+        GAS = gas_oracle.fastGasPrice
+
+    SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
+
+
+def get_weth_balance():
+    account = get_account()
+    return web3.fromWei(web3.eth.getBalance(account.address), "ether")
 
 
 def start_swap(
@@ -684,23 +726,37 @@ def start_swap(
             },
         )
         swap_trx.wait(1)
-        check_profitability(dex_pair_final_list)
-        print(f"Profit for pair {pairAddress} executed.")
-    except:
-        error = traceback.format_exc()
-        print(
-            "Error executing swap. Error: ",
-            error,
+        WETH_BALANCE = WETH_BALANCE = web3.fromWei(
+            web3.eth.getBalance(account.address), "ether"
         )
+        check_profitability(dex_pair_final_list)
+        print(
+            f"Profit for pair {pairAddress} executed. Amount WETH in the wallet: {WETH_BALANCE}"
+        )
+    except Exception as e:
+        WETH_BALANCE = WETH_BALANCE = web3.fromWei(
+            web3.eth.getBalance(account.address), "ether"
+        )
+        error = traceback.format_exc()
+        print("Error executing swap. Error: ", error)
         # remove from list
         errors = config["list_errors_to_remove_pairs"].split(";")
-        for er in errors:
-            if error.find(er) != -1:
-                try:
-                    PAIRS_LIST_TO_REMOVE.append(dex_pair_final_list)
-                except:
-                    pass
-                break
+        if error.find("eth_abi.exceptions.NonEmptyPaddingBytes") != -1:
+            PAIRS_LIST_TO_REMOVE.append(dex_pair_final_list)
+            print(f"pair {pairAddress} added on the lis to be removed.")
+        else:
+            for er in errors:
+                if error.find(er) != -1 or (
+                    e.__str__().find("revert") != -1
+                    and e.__str__().find("revert:") == -1
+                ):
+                    try:
+                        PAIRS_LIST_TO_REMOVE.append(dex_pair_final_list)
+                        print(f"pair {pairAddress} added on the lis to be removed.")
+                        break
+                    except:
+                        pass
+                    break
 
 
 def remove_pairs_with_errors(global_list, list_to_remove):
@@ -769,14 +825,13 @@ def main2():
 
 def main1():
     print("Starting main!")
+    pair0 = "0x6b0b819494a3b789439f32fb0097a625b16b5225"
+    pair1 = "0x89fa2fd7dd529d70912b434269843389c5575822"
+    token0 = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    token1 = "0xc7924bf912ebc9b92e3627aed01f816629c7e400"
     watcher, account = deploy_watcher()
-    deploy_flash_swap()
-    dex0_reserve0, dex0_reserve1 = watcher.getReservers(
-        "0x04039c93768e872c469ed1e8a6a199ad90e56206"
-    )
-    dex1_reserve0, dex1_reserve1 = watcher.getReservers(
-        "0xb9e4b63716252ec73dc43c545bfd58d18f040251"
-    )
+    dex0_reserve0, dex0_reserve1 = watcher.getReservers(pair0)
+    dex1_reserve0, dex1_reserve1 = watcher.getReservers(pair1)
     print(
         f"dex0_reserve0: {dex0_reserve0} dex0_reserve1: {dex0_reserve1} dex1_reserve0: {dex1_reserve0} dex1_reserve1: {dex1_reserve1}"
     )
@@ -789,9 +844,10 @@ def main1():
         * min(dex0_reserve1, dex1_reserve1)
     )
     print(f"reserve0: {reserve0} reserve1: {reserve1}")
+    """
     tokens = []
-    tokens.append("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
-    tokens.append("0xb220d53f7d0f52897bcf25e47c4c3dc0bac344f8")
+    tokens.append("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+    tokens.append("0xc7924bf912ebc9b92e3627aed01f816629c7e400")
     amounts = []
     amounts.append(reserve0)
     amounts.append(reserve1)
@@ -799,27 +855,31 @@ def main1():
     routers.append("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
     routers.append("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
     pairs = []
-    pairs.append("0x04039c93768e872c469ed1e8a6a199ad90e56206")
-    pairs.append("0xb9e4b63716252ec73dc43c545bfd58d18f040251")
+    pairs.append("0x6b0b819494a3b789439f32fb0097a625b16b5225")
+    pairs.append("0x89fa2fd7dd529d70912b434269843389c5575822")
     profit, amountOut, result = watcher.validate(
         tokens,
         amounts,
         routers,
-        pairs,
         {"from": account},
     )
     print(
         f"profit: {profit} amountOut: {amountOut} result0: {result[0]} result1: {result[1]}"
     )
-    _pairAddress = "0x04039c93768e872c469ed1e8a6a199ad90e56206"
-    _tokenBorrow = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-    _amountTokenPay = 1226392
+    """
+    """
+    deploy_flash_swap()
+    _pairAddress = "0x6b0b819494a3b789439f32fb0097a625b16b5225"
+    _tokenBorrow = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    _amountTokenPay = 10000000
     _sourceRouter = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
     _targetRouter = "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F"
     gas_limit = 330000
     max_base_fee_per_gas = 150
     max_priority_fee = 10
+    dex_pair_final_list = []
     start_swap(
+        dex_pair_final_list,
         _pairAddress,
         _tokenBorrow,
         _amountTokenPay,
@@ -831,7 +891,8 @@ def main1():
     )
     """
     watcher, account = deploy_watcher()
-    deploy_flash_swap()
+    flash, acc = deploy_flash_swap()
+    tst_fill_prices_info()
     dex_name = []
     dex_name.append("uniswap")
     dex_name.append("sushiswap")
@@ -842,16 +903,16 @@ def main1():
     routers.append("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
     routers.append("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
     pairs = []
-    pairs.append("0x08b57d4e6404da14d41290fd4e4cc281eff7c517")
-    pairs.append("0xf86710f80bb24d31fb219f06fe2953b825ab2975")
+    pairs.append(pair0)
+    pairs.append(pair1)
     tokens = []
-    tokens.append("0x8dd4228605e467671941ffb4cae15cf7959c8d9d")
-    tokens.append("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+    tokens.append(token0)
+    tokens.append(token1)
     decimals = []
     decimals.append(18)
     decimals.append(18)
-    amount0 = 10 ** int(18)
-    amount1 = 10 ** int(18)
+    amount0 = reserve0
+    amount1 = reserve1
     amounts = []
     amounts.append(amount0)
     amounts.append(amount1)
@@ -866,8 +927,9 @@ def main1():
     )
     list_final = []
     list_final.append(dpf)
+    # profit, amountOut, result = watcher.validate(tokens, amounts, routers, {"from": account},)
+    # print(f"profit: {profit} amountOut: {amountOut}")
     check_profitability(list_final)
-    """
 
 
 def no_multithreads_sending_swaps():

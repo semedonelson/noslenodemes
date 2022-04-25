@@ -8,6 +8,7 @@ dotenv: .env
 liquidity_pairs_list_percentage: 25
 dex_info_process_cicle_minutes: 240
 percentage_amount_to_use: 80
+top_percentage_amount_to_request: 95
 coingecko_prices_url: "https://api.coingecko.com/api/v3/simple/price?ids=ethereum,tether,usd-coin&vs_currencies=usd"
 gasoracle_url: "https://api.etherscan.io/api?module=gastracker&action=gasoracle&apikey=76EIAGPFFB8GNK9Z8IGEAN85DMZER3DMN4"
 token_weth: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
@@ -29,7 +30,7 @@ profit_level3_priority_feed_multiplier: 3.00
 profit_level4_priority_feed_multiplier: 3.50
 profit_level_other_priority_feed_multiplier: 4.00
 use_multithreads_for_sending_swaps: False
-list_errors_to_remove_pairs: "TRANSFER_FAILED;TRANSFER_FAILED"
+list_errors_to_remove_pairs: "TRANSFER_FAILED;UniswapV2: K;INSUFFICIENT_INPUT_AMOUNT"
 networks:
   default: mainnet-fork
   development:
