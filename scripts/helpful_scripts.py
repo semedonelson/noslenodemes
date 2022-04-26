@@ -1,6 +1,17 @@
-from brownie import config, network, accounts
-from scripts.classes import oracle_data, ObjectEncoder, pair, dex, ethgasoracle
-from scripts.getdata import run_query_post, get_prices_data, get_ethgasoracle
+from brownie import config, network, accounts, interface
+from scripts.classes import (
+    oracle_data,
+    ObjectEncoder,
+    pair,
+    dex,
+    ethgasoracle,
+)
+from scripts.getdata import (
+    run_query_post,
+    get_prices_data,
+    get_ethgasoracle,
+    get_weth_abi,
+)
 import csv
 import json
 from json import JSONEncoder
@@ -217,3 +228,18 @@ def get_prices():
 def get_gas():
     gas = get_ethgasoracle()
     return gas
+
+
+def get_weth(ether_wei):
+    """
+    Mints WETH by depositing ETH.
+    """
+    account = get_account()
+    weth = interface.IWeth(config["token_weth"])
+    tx = weth.deposit({"from": account, "value": ether_wei})
+    tx.wait(1)
+    print("WETH Received.")
+
+
+def get_etherscan_weth_abi():
+    return get_weth_abi()

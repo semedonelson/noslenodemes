@@ -8,6 +8,8 @@ from scripts.helpful_scripts import (
     get_liquidity_pairs_list_percentage,
     get_prices,
     get_gas,
+    get_weth,
+    get_etherscan_weth_abi,
 )
 from scripts.classes import (
     token,
@@ -30,6 +32,7 @@ from queue import Queue
 from decimal import Decimal
 import traceback
 from eth_abi import decode_single
+from solcx import compile_standard, install_solc
 
 # Global variables
 MOST_TRADED_PAIRS_LIST = []
@@ -39,6 +42,8 @@ DEX_INFO_LIST = []
 PRICES = {}
 GAS = 0.0
 SUGGEST_BASE_FEE = 0.0
+WETH_BALANCE = 0
+WETH_ABI = ""
 # Queues
 queue_dex_info = Queue()
 queue_most_traded_pairs = Queue()
@@ -317,6 +322,7 @@ def fill_dex_info():
             ## to be removed
             # break
             while unix_date_time_next > unix_date_time_current:
+                time.sleep(60)
                 try:
                     date_time_current = datetime.now()
                     unix_date_time_current = int(
@@ -551,27 +557,31 @@ def fill_prices_info():
     global PRICES
     global GAS
     global SUGGEST_BASE_FEE
+    global WETH_ABI
     account = get_account()
     while True:
-        # Prices
-        pr = get_prices()
-        if len(pr) > 0:
-            PRICES = pr
-        # Gas
-        gas_oracle = get_gas()
-        if config["gas_type"] == "fast":
-            GAS = gas_oracle.fastGasPrice
-        elif config["gas_type"] == "propose":
-            GAS = gas_oracle.proposeGasPrice
-        elif config["gas_type"] == "safe":
-            GAS = gas_oracle.safeGasPrice
-        else:
-            GAS = gas_oracle.fastGasPrice
+        try:
+            # Prices
+            pr = get_prices()
+            if len(pr) > 0:
+                PRICES = pr
+            # Gas
+            gas_oracle = get_gas()
+            if config["gas_type"] == "fast":
+                GAS = gas_oracle.fastGasPrice
+            elif config["gas_type"] == "propose":
+                GAS = gas_oracle.proposeGasPrice
+            elif config["gas_type"] == "safe":
+                GAS = gas_oracle.safeGasPrice
+            else:
+                GAS = gas_oracle.fastGasPrice
 
-        SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
-
-        # sleep
-        time.sleep(int(config["coingecko_prices_refresh_seconds"]))
+            SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
+            check_balance(WETH_ABI)
+            # sleep
+            time.sleep(int(config["coingecko_prices_refresh_seconds"]))
+        except:
+            pass
 
 
 def swap_gas_cost(
@@ -691,9 +701,25 @@ def tst_fill_prices_info():
     SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
 
 
-def get_weth_balance():
+def check_balance(json_abi):
+    global WETH_BALANCE
     account = get_account()
-    return web3.fromWei(web3.eth.getBalance(account.address), "ether")
+    ether = web3.fromWei(web3.eth.getBalance(account.address), "ether")
+    contract = web3.eth.contract(
+        address=web3.toChecksumAddress(config["token_weth"].lower()), abi=json_abi
+    )
+
+    if ether > 0:
+        tokenBalance = contract.functions.balanceOf(account.address).call()
+        print(f"WETH Balance: {tokenBalance}")
+        get_weth(web3.toWei(ether, "ether"))
+
+    tokenBalance = contract.functions.balanceOf(account.address).call()
+    if WETH_BALANCE != tokenBalance:
+        print(f"WETH Balance: {tokenBalance}")
+        WETH_BALANCE = tokenBalance
+
+    return tokenBalance
 
 
 def start_swap(
@@ -726,17 +752,9 @@ def start_swap(
             },
         )
         swap_trx.wait(1)
-        WETH_BALANCE = WETH_BALANCE = web3.fromWei(
-            web3.eth.getBalance(account.address), "ether"
-        )
         check_profitability(dex_pair_final_list)
-        print(
-            f"Profit for pair {pairAddress} executed. Amount WETH in the wallet: {WETH_BALANCE}"
-        )
+        print(f"Profit for pair {pairAddress} executed.")
     except Exception as e:
-        WETH_BALANCE = WETH_BALANCE = web3.fromWei(
-            web3.eth.getBalance(account.address), "ether"
-        )
         error = traceback.format_exc()
         print("Error executing swap. Error: ", error)
         # remove from list
@@ -805,7 +823,10 @@ def test():
 
 
 def main3():
-    test()
+    global WETH_ABI
+    WETH_ABI = get_etherscan_weth_abi()
+    check_balance(WETH_ABI)
+    fill_prices_info()
 
 
 def main2():
@@ -982,6 +1003,9 @@ def no_multithreads_sending_swaps():
 
 
 def main():
+    global WETH_ABI
+    WETH_ABI = get_etherscan_weth_abi()
+    check_balance(WETH_ABI)
     deploy_watcher()
     deploy_flash_swap()
     with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -1006,3 +1030,4 @@ if __name__ == "__main__":
     main()
 # https://docs.uniswap.org/protocol/V2/reference/smart-contracts/common-errors
 # web3_flas_swap.functions.start estimated_gas: 298750
+# get weth - https://github.com/PatrickAlphaC/aave_brownie_py_freecode

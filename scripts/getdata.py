@@ -38,3 +38,11 @@ def get_ethgasoracle():
     )
 
     return gas
+
+
+def get_weth_abi():
+    url = config["etherscan_weth_abi"]
+    response = requests.get(url, timeout=10)
+    j = json.loads(response.content.decode("utf-8"))
+    abi_json = json.loads(j["result"])
+    return abi_json
