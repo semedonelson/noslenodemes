@@ -44,6 +44,7 @@ GAS = 0.0
 SUGGEST_BASE_FEE = 0.0
 WETH_BALANCE = 0
 WETH_ABI = ""
+TOKENS_IN_WALLET_LIST = []
 # Queues
 queue_dex_info = Queue()
 queue_most_traded_pairs = Queue()
@@ -474,6 +475,7 @@ def check_profitability(dex_pair_final_list):
                             dex_pair_final_list,
                             _pairAddress,
                             _tokenBorrow,
+                            _dex_pair_final.tokens[1],
                             _amountTokenPay,
                             _sourceRouter,
                             _targetRouter,
@@ -530,6 +532,7 @@ def check_profitability(dex_pair_final_list):
                             dex_pair_final_list,
                             _pairAddress,
                             _tokenBorrow,
+                            _dex_pair_final.tokens[0],
                             _amountTokenPay,
                             _sourceRouter,
                             _targetRouter,
@@ -557,7 +560,7 @@ def fill_prices_info():
     global PRICES
     global GAS
     global SUGGEST_BASE_FEE
-    global WETH_ABI
+    WETH_ABI = get_etherscan_weth_abi()
     account = get_account()
     while True:
         try:
@@ -581,7 +584,8 @@ def fill_prices_info():
             # sleep
             time.sleep(int(config["coingecko_prices_refresh_seconds"]))
         except:
-            pass
+            error = traceback.format_exc()
+            print(f"fill_prices_info error: {error}")
 
 
 def swap_gas_cost(
@@ -719,6 +723,20 @@ def check_balance(json_abi):
         print(f"WETH Balance: {tokenBalance}")
         WETH_BALANCE = tokenBalance
 
+    if len(TOKENS_IN_WALLET_LIST) == 0:
+        TOKENS_IN_WALLET_LIST.append(config["token_weth"])
+
+    print("Tokens in wallet:")
+    count = 0
+    for token in TOKENS_IN_WALLET_LIST:
+        contract = web3.eth.contract(
+            address=web3.toChecksumAddress(token.lower()), abi=json_abi
+        )
+        amount = contract.functions.balanceOf(account.address).call()
+        if amount > 0:
+            count += 1
+            print(f"{count} - token: {token} amount: {amount}")
+
     return tokenBalance
 
 
@@ -726,6 +744,7 @@ def start_swap(
     dex_pair_final_list,
     pairAddress,
     tokenBorrow,
+    tokenOther,
     amountTokenPay,
     sourceRouter,
     targetRouter,
@@ -754,6 +773,9 @@ def start_swap(
         swap_trx.wait(1)
         check_profitability(dex_pair_final_list)
         print(f"Profit for pair {pairAddress} executed.")
+        if tokenOther not in TOKENS_IN_WALLET_LIST:
+            TOKENS_IN_WALLET_LIST.append(tokenOther)
+
     except Exception as e:
         error = traceback.format_exc()
         print("Error executing swap. Error: ", error)
@@ -804,6 +826,55 @@ def remove_pairs_with_errors(global_list, list_to_remove):
         print("remove_pairs_with_errors error ", error)
 
     return global_list, list_to_remove
+
+
+def no_multithreads_sending_swaps():
+    list_most_traded_pairs = []
+    list_less_traded_pairs = []
+    global PAIRS_LIST_TO_REMOVE
+    while True:
+        try:
+            try:
+                list_most_traded_pairs = queue_most_traded_pairs.get_nowait()
+            except:
+                pass
+
+            if len(PAIRS_LIST_TO_REMOVE) > 0:
+                (
+                    list_most_traded_pairs,
+                    PAIRS_LIST_TO_REMOVE,
+                ) = remove_pairs_with_errors(
+                    list_most_traded_pairs, PAIRS_LIST_TO_REMOVE
+                )
+
+            if len(list_most_traded_pairs) > 0:
+                print("Start Executing Most Traded Pairs")
+            for dex_pair_final_list in list_most_traded_pairs:
+                check_profitability(dex_pair_final_list)
+            if len(list_most_traded_pairs) > 0:
+                print("End Executing Most Traded Pairs")
+            # ---------------------------------
+            if len(PAIRS_LIST_TO_REMOVE) > 0:
+                (
+                    list_less_traded_pairs,
+                    PAIRS_LIST_TO_REMOVE,
+                ) = remove_pairs_with_errors(
+                    list_less_traded_pairs, PAIRS_LIST_TO_REMOVE
+                )
+
+            try:
+                list_less_traded_pairs = queue_less_traded_pairs.get_nowait()
+            except:
+                pass
+            if len(list_less_traded_pairs) > 0:
+                print("Start Executing Less Traded Pairs")
+            for dex_pair_final_list in list_less_traded_pairs:
+                check_profitability(dex_pair_final_list)
+            if len(list_less_traded_pairs) > 0:
+                print("End Executing Less Traded Pairs")
+        except:
+            error = traceback.format_exc()
+            print("Error: ", error)
 
 
 def test():
@@ -951,55 +1022,6 @@ def main1():
     # profit, amountOut, result = watcher.validate(tokens, amounts, routers, {"from": account},)
     # print(f"profit: {profit} amountOut: {amountOut}")
     check_profitability(list_final)
-
-
-def no_multithreads_sending_swaps():
-    list_most_traded_pairs = []
-    list_less_traded_pairs = []
-    global PAIRS_LIST_TO_REMOVE
-    while True:
-        try:
-            try:
-                list_most_traded_pairs = queue_most_traded_pairs.get_nowait()
-            except:
-                pass
-
-            if len(PAIRS_LIST_TO_REMOVE) > 0:
-                (
-                    list_most_traded_pairs,
-                    PAIRS_LIST_TO_REMOVE,
-                ) = remove_pairs_with_errors(
-                    list_most_traded_pairs, PAIRS_LIST_TO_REMOVE
-                )
-
-            if len(list_most_traded_pairs) > 0:
-                print("Start Executing Most Traded Pairs")
-            for dex_pair_final_list in list_most_traded_pairs:
-                check_profitability(dex_pair_final_list)
-            if len(list_most_traded_pairs) > 0:
-                print("End Executing Most Traded Pairs")
-            # ---------------------------------
-            if len(PAIRS_LIST_TO_REMOVE) > 0:
-                (
-                    list_less_traded_pairs,
-                    PAIRS_LIST_TO_REMOVE,
-                ) = remove_pairs_with_errors(
-                    list_less_traded_pairs, PAIRS_LIST_TO_REMOVE
-                )
-
-            try:
-                list_less_traded_pairs = queue_less_traded_pairs.get_nowait()
-            except:
-                pass
-            if len(list_less_traded_pairs) > 0:
-                print("Start Executing Less Traded Pairs")
-            for dex_pair_final_list in list_less_traded_pairs:
-                check_profitability(dex_pair_final_list)
-            if len(list_less_traded_pairs) > 0:
-                print("End Executing Less Traded Pairs")
-        except:
-            error = traceback.format_exc()
-            print("Error: ", error)
 
 
 def main():
