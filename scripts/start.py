@@ -705,23 +705,39 @@ def tst_fill_prices_info():
     SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
 
 
+def check_convertions(json_abi):
+    account = get_account()
+    minimum_weth_target_wei = web3.toWei(
+        Decimal(config["minimum_weth_target"]), "ether"
+    )
+    contract = web3.eth.contract(
+        address=web3.toChecksumAddress(config["token_weth"].lower()), abi=json_abi
+    )
+    weth_amount_wei = contract.functions.balanceOf(account.address).call()
+    ether_amount_wei = web3.eth.getBalance(account.address)
+
+    if ether_amount_wei > 0:
+        if weth_amount_wei < minimum_weth_target_wei:
+            if minimum_weth_target_wei - weth_amount_wei > ether_amount_wei:
+                get_weth(ether_amount_wei)
+            else:
+                get_weth(minimum_weth_target_wei - weth_amount_wei)
+
+
 def check_balance(json_abi):
     global WETH_BALANCE
+    global PRICES
     account = get_account()
     ether = web3.fromWei(web3.eth.getBalance(account.address), "ether")
     contract = web3.eth.contract(
         address=web3.toChecksumAddress(config["token_weth"].lower()), abi=json_abi
     )
 
-    if ether > 0:
-        tokenBalance = contract.functions.balanceOf(account.address).call()
-        print(f"WETH Balance: {tokenBalance}")
-        get_weth(web3.toWei(ether, "ether"))
+    check_convertions(json_abi)
 
-    tokenBalance = contract.functions.balanceOf(account.address).call()
-    if WETH_BALANCE != tokenBalance:
-        print(f"WETH Balance: {tokenBalance}")
-        WETH_BALANCE = tokenBalance
+    ether_amount = web3.fromWei(web3.eth.getBalance(account.address), "ether")
+    ether_amount_usd = round(ether_amount * Decimal(PRICES[config["token_weth"]]), 2)
+    print(f"Ether amount: {ether_amount} Ether USD: {ether_amount_usd}")
 
     if len(TOKENS_IN_WALLET_LIST) == 0:
         TOKENS_IN_WALLET_LIST.append(config["token_weth"])
@@ -735,9 +751,15 @@ def check_balance(json_abi):
         amount = contract.functions.balanceOf(account.address).call()
         if amount > 0:
             count += 1
-            print(f"{count} - token: {token} amount: {amount}")
-
-    return tokenBalance
+            if token == config["token_weth"]:
+                amount_usd = round(
+                    web3.fromWei(amount, "ether")
+                    * Decimal(PRICES[config["token_weth"]]),
+                    2,
+                )
+                print(f"{count} - token: {token} amount: {amount} USD: {amount_usd}")
+            else:
+                print(f"{count} - token: {token} amount: {amount}")
 
 
 def start_swap(
@@ -893,9 +915,10 @@ def test():
     )
 
 
-def main3():
+def main():
     global WETH_ABI
     WETH_ABI = get_etherscan_weth_abi()
+    tst_fill_prices_info()
     check_balance(WETH_ABI)
     fill_prices_info()
 
@@ -1024,7 +1047,7 @@ def main1():
     check_profitability(list_final)
 
 
-def main():
+def main0():
     global WETH_ABI
     WETH_ABI = get_etherscan_weth_abi()
     check_balance(WETH_ABI)
