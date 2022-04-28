@@ -120,4 +120,19 @@ contract FlashSwap {
     ) external {
         execute(_sender, _amount0, _amount1, _data);
     }
+
+    function swap_tokens(
+        address router,
+        uint256 amountToken,
+        uint256 amountRequired,
+        address[] memory path
+    ) public onlyOwner {
+        IUniswapV2Router02(router).swapExactTokensForTokens(
+            amountToken,
+            amountRequired, // we already now what we need at least for payback; get less is a fail; slippage can be done via - ((amountRequired * 19) / 981) + 1,
+            path,
+            address(this), // its a foreign call; from router but we need contract address also equal to "_sender"
+            block.timestamp + 60
+        )[1];
+    }
 }

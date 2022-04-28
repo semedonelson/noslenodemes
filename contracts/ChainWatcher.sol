@@ -94,4 +94,23 @@ contract ChainWatcher is Ownable {
             amountOut // the amount we get from our input "_amountTokenPay"; example: BUSD amount
         );
     }
+
+    function getMaxAmountsOut(
+        address[] memory routers,
+        uint256 amount,
+        address[] memory tokens
+    ) public view onlyOwner returns (uint256 amountOut, address router) {
+        amountOut = 0;
+        uint256 amt = 0;
+        router = address(0);
+        for (uint256 i; i < routers.length - 1; i++) {
+            amt = IUniswapV2Router02(routers[i]).getAmountsOut(amount, tokens)[
+                1
+            ];
+            if (amt > amountOut) {
+                amountOut = amt;
+                router = routers[i];
+            }
+        }
+    }
 }

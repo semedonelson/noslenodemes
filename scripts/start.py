@@ -716,6 +716,25 @@ def check_convertions(json_abi):
     weth_amount_wei = contract.functions.balanceOf(account.address).call()
     ether_amount_wei = web3.eth.getBalance(account.address)
 
+    # Para cada tokens que tiver: TOKENS_IN_WALLET_LIST
+    # Vê se converte tokens para WETH (caso ainda não tiver suf ou para ETH)
+    # if weth_amount_wei < minimum_weth_target_wei:
+    # else ETH
+    """
+    tokens = []
+    tokens.append("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+    tokens.append("0xc7924bf912ebc9b92e3627aed01f816629c7e400")
+    routers = []
+    routers.append("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
+    routers.append("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
+    amount = web3.toWei(1.0, "ether")
+
+    deploy_watcher()
+    watcher = ChainWatcher[-1]
+    amt, address = watcher.getMaxAmountsOut(routers, amount, tokens)
+    print(f"amt: {amt} address: {address}")
+    """
+
     if ether_amount_wei > 0:
         if weth_amount_wei < minimum_weth_target_wei:
             if minimum_weth_target_wei - weth_amount_wei > ether_amount_wei:
@@ -728,10 +747,6 @@ def check_balance(json_abi):
     global WETH_BALANCE
     global PRICES
     account = get_account()
-    ether = web3.fromWei(web3.eth.getBalance(account.address), "ether")
-    contract = web3.eth.contract(
-        address=web3.toChecksumAddress(config["token_weth"].lower()), abi=json_abi
-    )
 
     check_convertions(json_abi)
 
@@ -744,6 +759,7 @@ def check_balance(json_abi):
 
     print("Tokens in wallet:")
     count = 0
+    weth_current_amount = 0
     for token in TOKENS_IN_WALLET_LIST:
         contract = web3.eth.contract(
             address=web3.toChecksumAddress(token.lower()), abi=json_abi
@@ -757,6 +773,7 @@ def check_balance(json_abi):
                     * Decimal(PRICES[config["token_weth"]]),
                     2,
                 )
+                amount = web3.fromWei(amount, "ether")
                 print(f"{count} - token: {token} amount: {amount} USD: {amount_usd}")
             else:
                 print(f"{count} - token: {token} amount: {amount}")
@@ -920,7 +937,7 @@ def main():
     WETH_ABI = get_etherscan_weth_abi()
     tst_fill_prices_info()
     check_balance(WETH_ABI)
-    fill_prices_info()
+    # fill_prices_info()
 
 
 def main2():

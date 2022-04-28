@@ -15,7 +15,7 @@ etherscan_weth_abi: "https://api.etherscan.io/api?module=contract&action=getabi&
 token_weth: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
 token_tether: "0xdac17f958d2ee523a2206206994597c13d831ec7"
 token_usdc: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-minimum_weth_target: 1001
+minimum_weth_target: 900.999
 gas_type: "fast"
 base_fee_multiplier: 2.0
 gas_limit_start_swap: 330000
