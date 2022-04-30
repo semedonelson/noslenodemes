@@ -29,7 +29,7 @@ contract FlashSwap {
         uint256 _tokenBorrowAmount, // example: BUSD => 10 * 1e18 [Amountout]
         address _sourceRouter,
         address _targetRouter
-    ) public onlyOwner {
+    ) external onlyOwner {
         require(block.number <= _maxBlockNumber, "out of block");
 
         address token0 = IUniswapV2Pair(_pairAddress).token0();
@@ -53,7 +53,7 @@ contract FlashSwap {
         uint256 _amount0,
         uint256 _amount1,
         bytes memory _data
-    ) public {
+    ) internal {
         // obtain an amount of token that you exchanged
         uint256 amountToken = _amount0 == 0 ? _amount1 : _amount0;
 
@@ -122,17 +122,39 @@ contract FlashSwap {
     }
 
     function swap_tokens(
-        address router,
-        uint256 amountToken,
-        uint256 amountRequired,
-        address[] memory path
-    ) public onlyOwner {
-        IUniswapV2Router02(router).swapExactTokensForTokens(
-            amountToken,
-            amountRequired, // we already now what we need at least for payback; get less is a fail; slippage can be done via - ((amountRequired * 19) / 981) + 1,
+        address _tokenIn,
+        address _tokenOut,
+        uint256 _amountIn,
+        uint256 _amountOutMin,
+        address _router
+    ) external onlyOwner {
+        IERC20(_tokenIn).transferFrom(msg.sender, address(this), _amountIn);
+        IERC20(_tokenIn).approve(_router, _amountIn);
+        address[] memory path;
+        path = new address[](2);
+        path[0] = _tokenIn;
+        path[1] = _tokenOut;
+        IUniswapV2Router02(_router).swapExactTokensForTokens(
+            _amountIn,
+            _amountOutMin,
             path,
-            address(this), // its a foreign call; from router but we need contract address also equal to "_sender"
-            block.timestamp + 60
-        )[1];
+            msg.sender,
+            block.timestamp
+        );
+    }
+
+    function set_approve_swap_tokens(address _tokenIn, uint256 _amountIn)
+        external
+        onlyOwner
+    {
+        IERC20(_tokenIn).approve(address(this), _amountIn);
+    }
+
+    function get_allowance(address _tokenIn) public view returns (uint256) {
+        uint256 allowance = IERC20(_tokenIn).allowance(
+            msg.sender,
+            address(this)
+        );
+        return allowance;
     }
 }

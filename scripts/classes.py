@@ -82,6 +82,12 @@ class dex_pair_final:
         self.amounts = amounts
 
 
+class tokens_in_wallet:
+    def __init__(self, token, amount):
+        self.token = token
+        self.amount = amount
+
+
 class fakefloat(float):
     def __init__(self, value):
         self._value = value

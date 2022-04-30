@@ -17,10 +17,12 @@ from scripts.classes import (
     dex_pair_info,
     dex_pair_final,
     ethgasoracle,
+    tokens_in_wallet,
+    dex,
 )
 import json
 from json import JSONEncoder
-from brownie import config, ChainWatcher, FlashSwap, web3
+from brownie import config, ChainWatcher, FlashSwap, web3, network
 import sys, signal
 import time
 from datetime import date
@@ -54,19 +56,27 @@ queue_dex_pair_final_list = Queue()
 
 def deploy_watcher():
     account = get_account()
-    watcher = ChainWatcher.deploy(
-        {"from": account},
-    )
-    print("Deployed Chain Watcher Contract!")
+    if len(ChainWatcher) == 0:
+        watcher = ChainWatcher.deploy(
+            {"from": account},
+        )
+        print("Deployed Chain Watcher Contract!")
+    else:
+        watcher = ChainWatcher[-1]
+        print(f"Chain Watcher Contract already Deployed. Address: {watcher.address}")
     return watcher, account
 
 
 def deploy_flash_swap():
     account = get_account()
-    flash = FlashSwap.deploy(
-        {"from": account},
-    )
-    print("Deployed Flash Swap Contract!")
+    if len(FlashSwap) == 0:
+        flash = FlashSwap.deploy(
+            {"from": account},
+        )
+        print("Deployed Flash Swap Contract!")
+    else:
+        flash = FlashSwap[-1]
+        print(f"Flash Swap Contract already Deployed. Address: {flash.address}")
     return flash, account
 
 
@@ -310,6 +320,7 @@ def get_reserves():
 
 
 def fill_dex_info():
+    global DEX_INFO_LIST
     while True:
         try:
             date_time_current = datetime.now()
@@ -471,18 +482,20 @@ def check_profitability(dex_pair_final_list):
                         print(
                             f"Profit found: pair: {_pairAddress} token to borrow: {_tokenBorrow} amount: {_amountTokenPay} net profit USD: {net_profit_usd}"
                         )
-                        start_swap(
-                            dex_pair_final_list,
-                            _pairAddress,
-                            _tokenBorrow,
-                            _dex_pair_final.tokens[1],
-                            _amountTokenPay,
-                            _sourceRouter,
-                            _targetRouter,
-                            gas_limit,
-                            max_base_fee_per_gas,
-                            max_priority_fee,
-                        )
+                        with concurrent.futures.ThreadPoolExecutor() as executor:
+                            start_s = executor.submit(
+                                start_swap,
+                                dex_pair_final_list,
+                                _pairAddress,
+                                _tokenBorrow,
+                                _dex_pair_final.tokens[1],
+                                _amountTokenPay,
+                                _sourceRouter,
+                                _targetRouter,
+                                gas_limit,
+                                max_base_fee_per_gas,
+                                max_priority_fee,
+                            )
                 elif result[0] == _dex_pair_final.tokens[1]:
                     _pairAddress = _dex_pair_final.pairs_id[1]
                     _tokenBorrow = _dex_pair_final.tokens[1]
@@ -528,18 +541,20 @@ def check_profitability(dex_pair_final_list):
                         print(
                             f"Profit found: pair: {_pairAddress} token to borrow: {_tokenBorrow} amount: {_amountTokenPay} net profit USD: {net_profit_usd}"
                         )
-                        start_swap(
-                            dex_pair_final_list,
-                            _pairAddress,
-                            _tokenBorrow,
-                            _dex_pair_final.tokens[0],
-                            _amountTokenPay,
-                            _sourceRouter,
-                            _targetRouter,
-                            gas_limit,
-                            max_base_fee_per_gas,
-                            max_priority_fee,
-                        )
+                        with concurrent.futures.ThreadPoolExecutor() as executor:
+                            start_s = executor.submit(
+                                start_swap,
+                                dex_pair_final_list,
+                                _pairAddress,
+                                _tokenBorrow,
+                                _dex_pair_final.tokens[0],
+                                _amountTokenPay,
+                                _sourceRouter,
+                                _targetRouter,
+                                gas_limit,
+                                max_base_fee_per_gas,
+                                max_priority_fee,
+                            )
         except:
             error = traceback.format_exc()
             print(
@@ -588,25 +603,23 @@ def fill_prices_info():
             print(f"fill_prices_info error: {error}")
 
 
-def swap_gas_cost(
-    _pairAddress,
-    _tokenBorrow,
-    _amountTokenPay,
-    _sourceRouter,
-    _targetRouter,
+def swap_tokens_estimate_gas(
+    _tokenIn,
+    _tokenOut,
+    _amountIn,
+    _amountOutMin,
+    _router,
 ):
     flas_swap = FlashSwap[-1]
     account = get_account()
-    total_block_number = web3.eth.block_number + 2
 
     web3_flas_swap = web3.eth.contract(address=flas_swap.address, abi=flas_swap.abi)
-    estimated_gas = web3_flas_swap.functions.start(
-        total_block_number,
-        web3.toChecksumAddress(_pairAddress.lower()),
-        web3.toChecksumAddress(_tokenBorrow.lower()),
-        _amountTokenPay,
-        web3.toChecksumAddress(_sourceRouter.lower()),
-        web3.toChecksumAddress(_targetRouter.lower()),
+    estimated_gas = web3_flas_swap.functions.swap_tokens(
+        web3.toChecksumAddress(_tokenIn.lower()),
+        web3.toChecksumAddress(_tokenOut.lower()),
+        _amountIn,
+        _amountOutMin,
+        web3.toChecksumAddress(_router.lower()),
     ).estimateGas({"from": web3.toChecksumAddress(account.address.lower())})
     print(f"Est. Gas:  {estimated_gas}")
 
@@ -705,38 +718,79 @@ def tst_fill_prices_info():
     SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
 
 
+def swap_tokens(tokenIn, tokenOut, amountIn, account, json_abi):
+    global TOKENS_IN_WALLET_LIST
+    watcher = ChainWatcher[-1]
+    flash = FlashSwap[-1]
+    tokens = []
+    tokens.append(tokenIn)
+    tokens.append(tokenOut)
+    dx1 = dex(
+        "uniswap",
+        "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
+        "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+        "WETH",
+        1000,
+        True,
+        True,
+    )
+    dx2 = dex(
+        "sushiswap",
+        "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac",
+        "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
+        "WETH",
+        1000,
+        True,
+        True,
+    )
+    DEX_INFO_LIST.append(dx1)
+    DEX_INFO_LIST.append(dx2)
+    maxAmountOut = 0
+    router = ""
+    for dx in DEX_INFO_LIST:
+        amountOut = 0
+        try:
+            amountOut = watcher.getAmountsOut(dx.router, amountIn, tokens)
+            if amountOut > maxAmountOut:
+                maxAmountOut = amountOut
+                router = dx.router
+        except Exception as e:
+            continue
+    if maxAmountOut > 0:
+        min_depre = Decimal(config["min_depre_percentage_token_swap"])
+        maxAmountOut = int(maxAmountOut - (maxAmountOut * (min_depre / 100)))
+        print(f"router: {router} maxAmountOut: {maxAmountOut}")
+        try:
+            print(
+                f"Start swap {amountIn} of {tokenIn} to at least {maxAmountOut} of {tokenOut}."
+            )
+            swap = flash.swap_tokens(
+                tokenIn, tokenOut, amountIn, maxAmountOut, router, {"from": account}
+            )
+            swap.wait(1)
+            if network.show_active() != "mainnet":
+                if tokenOut not in TOKENS_IN_WALLET_LIST:
+                    t_in_w = tokens_in_wallet(tokenOut, 0)
+                    TOKENS_IN_WALLET_LIST.append(t_in_w)
+        except Exception as e:
+            print("Error: ", e)
+
+
 def check_convertions(json_abi):
     account = get_account()
+    global TOKENS_IN_WALLET_LIST
+    global DEX_INFO_LIST
     minimum_weth_target_wei = web3.toWei(
         Decimal(config["minimum_weth_target"]), "ether"
     )
-    contract = web3.eth.contract(
+
+    weth_contract = web3.eth.contract(
         address=web3.toChecksumAddress(config["token_weth"].lower()), abi=json_abi
     )
-    weth_amount_wei = contract.functions.balanceOf(account.address).call()
+    weth_amount_wei = weth_contract.functions.balanceOf(account.address).call()
     ether_amount_wei = web3.eth.getBalance(account.address)
-
-    # Para cada tokens que tiver: TOKENS_IN_WALLET_LIST
-    # Vê se converte tokens para WETH (caso ainda não tiver suf ou para ETH)
-    # if weth_amount_wei < minimum_weth_target_wei:
-    # else ETH
-    """
-    tokens = []
-    tokens.append("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
-    tokens.append("0xc7924bf912ebc9b92e3627aed01f816629c7e400")
-    routers = []
-    routers.append("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
-    routers.append("0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F")
-    amount = web3.toWei(1.0, "ether")
-
-    deploy_watcher()
-    watcher = ChainWatcher[-1]
-    amt, address = watcher.getMaxAmountsOut(routers, amount, tokens)
-    print(f"amt: {amt} address: {address}")
-    """
-
-    if ether_amount_wei > 0:
-        if weth_amount_wei < minimum_weth_target_wei:
+    if weth_amount_wei < minimum_weth_target_wei:
+        if ether_amount_wei > 0:
             if minimum_weth_target_wei - weth_amount_wei > ether_amount_wei:
                 get_weth(ether_amount_wei)
             else:
@@ -746,37 +800,40 @@ def check_convertions(json_abi):
 def check_balance(json_abi):
     global WETH_BALANCE
     global PRICES
+    global TOKENS_IN_WALLET_LIST
     account = get_account()
 
-    check_convertions(json_abi)
-
-    ether_amount = web3.fromWei(web3.eth.getBalance(account.address), "ether")
-    ether_amount_usd = round(ether_amount * Decimal(PRICES[config["token_weth"]]), 2)
-    print(f"Ether amount: {ether_amount} Ether USD: {ether_amount_usd}")
-
     if len(TOKENS_IN_WALLET_LIST) == 0:
-        TOKENS_IN_WALLET_LIST.append(config["token_weth"])
+        t_in_w = tokens_in_wallet(config["token_weth"], 0)
+        TOKENS_IN_WALLET_LIST.append(t_in_w)
 
-    print("Tokens in wallet:")
-    count = 0
-    weth_current_amount = 0
-    for token in TOKENS_IN_WALLET_LIST:
-        contract = web3.eth.contract(
-            address=web3.toChecksumAddress(token.lower()), abi=json_abi
+    check_convertions(json_abi)
+    TOKENS_IN_WALLET_LIST = get_tokens_in_wallet(json_abi, account)
+    if len(PRICES) > 0:
+        ether_amount = web3.fromWei(web3.eth.getBalance(account.address), "ether")
+        ether_amount_usd = round(
+            ether_amount * Decimal(PRICES[config["token_weth"]]), 2
         )
-        amount = contract.functions.balanceOf(account.address).call()
-        if amount > 0:
-            count += 1
-            if token == config["token_weth"]:
-                amount_usd = round(
-                    web3.fromWei(amount, "ether")
-                    * Decimal(PRICES[config["token_weth"]]),
-                    2,
-                )
-                amount = web3.fromWei(amount, "ether")
-                print(f"{count} - token: {token} amount: {amount} USD: {amount_usd}")
-            else:
-                print(f"{count} - token: {token} amount: {amount}")
+        print(f"Ether amount: {ether_amount} Ether USD: {ether_amount_usd}")
+
+        print("Tokens in wallet:")
+        count = 0
+        weth_current_amount = 0
+        for tk in TOKENS_IN_WALLET_LIST:
+            if tk.amount > 0:
+                count += 1
+                if tk.token == config["token_weth"]:
+                    amount_usd = round(
+                        web3.fromWei(tk.amount, "ether")
+                        * Decimal(PRICES[config["token_weth"]]),
+                        2,
+                    )
+                    amount_ether = web3.fromWei(tk.amount, "ether")
+                    print(
+                        f"{count} - token: {tk.token} amount: {amount_ether} USD: {amount_usd}"
+                    )
+                else:
+                    print(f"{count} - token: {tk.token} amount: {tk.amount}")
 
 
 def start_swap(
@@ -812,8 +869,10 @@ def start_swap(
         swap_trx.wait(1)
         check_profitability(dex_pair_final_list)
         print(f"Profit for pair {pairAddress} executed.")
-        if tokenOther not in TOKENS_IN_WALLET_LIST:
-            TOKENS_IN_WALLET_LIST.append(tokenOther)
+        if network.show_active() != "mainnet":
+            if tokenOther not in TOKENS_IN_WALLET_LIST:
+                t_in_w = tokens_in_wallet(tokenOther, 0)
+                TOKENS_IN_WALLET_LIST.append(t_in_w)
 
     except Exception as e:
         error = traceback.format_exc()
@@ -836,6 +895,20 @@ def start_swap(
                     except:
                         pass
                     break
+
+
+def get_tokens_in_wallet(json_abi, account):
+    global TOKENS_IN_WALLET_LIST
+    if network.show_active() == "mainnet":
+        pass  # go get from bsscan
+    else:
+        for tk in TOKENS_IN_WALLET_LIST:
+            contract = web3.eth.contract(
+                address=web3.toChecksumAddress(tk.token.lower()), abi=json_abi
+            )
+            qty = contract.functions.balanceOf(account.address).call()
+            tk.amount = qty
+    return TOKENS_IN_WALLET_LIST
 
 
 def remove_pairs_with_errors(global_list, list_to_remove):
@@ -932,27 +1005,14 @@ def test():
     )
 
 
-def main():
+def main0():
     global WETH_ABI
+    deploy_flash_swap()
+    deploy_watcher()
     WETH_ABI = get_etherscan_weth_abi()
     tst_fill_prices_info()
     check_balance(WETH_ABI)
     # fill_prices_info()
-
-
-def main2():
-    deploy_flash_swap()
-    start_swap(
-        [],
-        "0x04039c93768e872c469ed1e8a6a199ad90e56206",
-        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-        1226392,
-        "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-        "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
-        300000,
-        200,
-        10,
-    )
 
 
 def main1():
@@ -1064,7 +1124,7 @@ def main1():
     check_profitability(list_final)
 
 
-def main0():
+def main():
     global WETH_ABI
     WETH_ABI = get_etherscan_weth_abi()
     check_balance(WETH_ABI)
@@ -1093,3 +1153,4 @@ if __name__ == "__main__":
 # https://docs.uniswap.org/protocol/V2/reference/smart-contracts/common-errors
 # web3_flas_swap.functions.start estimated_gas: 298750
 # get weth - https://github.com/PatrickAlphaC/aave_brownie_py_freecode
+# https://docs.uniswap.org/protocol/V2/reference/smart-contracts/router-02
