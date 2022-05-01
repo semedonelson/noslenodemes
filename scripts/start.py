@@ -757,6 +757,8 @@ def swap_tokens(tokenIn, tokenOut, amountIn, account, json_abi):
         except Exception as e:
             continue
     if maxAmountOut > 0:
+        # Calculate estimate cost here with estimate gas
+        # Go if cost < profit
         min_depre = Decimal(config["min_depre_percentage_token_swap"])
         maxAmountOut = int(maxAmountOut - (maxAmountOut * (min_depre / 100)))
         print(f"router: {router} maxAmountOut: {maxAmountOut}")
@@ -770,6 +772,15 @@ def swap_tokens(tokenIn, tokenOut, amountIn, account, json_abi):
                 flash.address, amountIn
             ).transact({"from": account.address})
             x_receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+            # Calcute real cost here. If cost steel < profit go
+            estimate_gas = swap_tokens_estimate_gas(
+                tokenIn,
+                tokenOut,
+                amountIn,
+                maxAmountOut,
+                router,
+            )
+            print(f"estimate_gas: {estimate_gas}")
             print(
                 f"Start swap {amountIn} of {tokenIn} to at least {maxAmountOut} of {tokenOut}."
             )
