@@ -761,6 +761,15 @@ def swap_tokens(tokenIn, tokenOut, amountIn, account, json_abi):
         maxAmountOut = int(maxAmountOut - (maxAmountOut * (min_depre / 100)))
         print(f"router: {router} maxAmountOut: {maxAmountOut}")
         try:
+            token_contract = web3.eth.contract(
+                address=web3.toChecksumAddress(tokenIn.lower()),
+                abi=json_abi,
+            )
+            print(f"Start approve Flash contract to spend {amountIn} of {tokenIn}")
+            tx_hash = token_contract.functions.approve(
+                flash.address, amountIn
+            ).transact({"from": account.address})
+            x_receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
             print(
                 f"Start swap {amountIn} of {tokenIn} to at least {maxAmountOut} of {tokenOut}."
             )
@@ -795,6 +804,14 @@ def check_convertions(json_abi):
                 get_weth(ether_amount_wei)
             else:
                 get_weth(minimum_weth_target_wei - weth_amount_wei)
+
+    swap_tokens(
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        web3.toWei(1.0, "ether"),
+        account,
+        json_abi,
+    )
 
 
 def check_balance(json_abi):
@@ -1005,7 +1022,7 @@ def test():
     )
 
 
-def main0():
+def main():
     global WETH_ABI
     deploy_flash_swap()
     deploy_watcher()
@@ -1124,7 +1141,7 @@ def main1():
     check_profitability(list_final)
 
 
-def main():
+def main0():
     global WETH_ABI
     WETH_ABI = get_etherscan_weth_abi()
     check_balance(WETH_ABI)

@@ -21,7 +21,7 @@ base_fee_multiplier: 2.0
 gas_limit_start_swap: 330000
 coingecko_prices_refresh_seconds: 20
 token_value_min_threshould: 1000.00
-min_depre_percentage_token_swap: 1.0
+min_depre_percentage_token_swap: 0.5
 remove_min_threshould_pairs: False
 profit_level1: 1000.00
 profit_level2: 10000.00
