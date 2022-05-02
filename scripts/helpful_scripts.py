@@ -11,6 +11,8 @@ from scripts.getdata import (
     get_prices_data,
     get_ethgasoracle,
     get_weth_abi,
+    get_coingecko_token_list,
+    get_coingecko_token_det,
 )
 import csv
 import json
@@ -213,16 +215,14 @@ def get_liquidity_pairs_list_percentage():
     return int(config["liquidity_pairs_list_percentage"])
 
 
-def get_prices():
-    prices = {}
-    response = get_prices_data()
+def get_prices(coingecko_id):
+    price = 0
+    response = get_prices_data(coingecko_id)
     try:
-        prices[config["token_weth"].lower()] = response["ethereum"]["usd"]
-        prices[config["token_tether"].lower()] = response["tether"]["usd"]
-        prices[config["token_usdc"].lower()] = response["usd-coin"]["usd"]
+        price = response[coingecko_id]["usd"]
     except:
         pass
-    return prices
+    return price
 
 
 def get_gas():
@@ -243,3 +243,11 @@ def get_weth(ether_wei):
 
 def get_etherscan_weth_abi():
     return get_weth_abi()
+
+
+def get_coingecko_token():
+    return get_coingecko_token_list()
+
+
+def get_coingecko_token_details(url):
+    return get_coingecko_token_det(url)

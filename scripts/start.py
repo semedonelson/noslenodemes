@@ -10,6 +10,8 @@ from scripts.helpful_scripts import (
     get_gas,
     get_weth,
     get_etherscan_weth_abi,
+    get_coingecko_token,
+    get_coingecko_token_details,
 )
 from scripts.classes import (
     token,
@@ -19,6 +21,7 @@ from scripts.classes import (
     ethgasoracle,
     tokens_in_wallet,
     dex,
+    tokens_coingecko_price,
 )
 import json
 from json import JSONEncoder
@@ -47,11 +50,20 @@ SUGGEST_BASE_FEE = 0.0
 WETH_BALANCE = 0
 WETH_ABI = ""
 TOKENS_IN_WALLET_LIST = []
+COINGECKO_TOKEN_LIST = []
+TOKENS_PRICES_LIST = []
 # Queues
 queue_dex_info = Queue()
 queue_most_traded_pairs = Queue()
 queue_less_traded_pairs = Queue()
 queue_dex_pair_final_list = Queue()
+
+
+def coingecko_list_tokens():
+    global COINGECKO_TOKEN_LIST
+    print("Get coingecko tokens list ...")
+    COINGECKO_TOKEN_LIST = get_coingecko_token()
+    print("Total of coingecko tokens: ", len(COINGECKO_TOKEN_LIST))
 
 
 def deploy_watcher():
@@ -78,6 +90,130 @@ def deploy_flash_swap():
         flash = FlashSwap[-1]
         print(f"Flash Swap Contract already Deployed. Address: {flash.address}")
     return flash, account
+
+
+def process_dex_pairs_list_tokens(final_dex_pairs_list):
+    global TOKENS_PRICES_LIST
+    tokens_list = []
+    pairs_to_remove = []
+    print("Staring setup tokens price list ...")
+    try:
+        for pairs_list in final_dex_pairs_list:
+            token0_found = False
+            token1_found = False
+            for pair in pairs_list:
+                token0 = pair.token0["id"]
+                token1 = pair.token1["id"]
+                symbol0 = pair.token0["symbol"]
+                symbol1 = pair.token1["symbol"]
+                decimal0 = pair.token0["decimals"]
+                decimal1 = pair.token1["decimals"]
+                # Se o token não existir no tokens_list. Mudar o metodo add_token_list para se existir t or f. Ou manter este metodo e ter criar
+                # uma lista com os tokens já adicionados.
+                # Também ter uma lista dos tokens que não existe, para não serem executados novamente
+                coingecko_id0 = get_coingecko_id_by_symbol(symbol0, token0)
+                coingecko_id1 = get_coingecko_id_by_symbol(symbol1, token1)
+                print(
+                    "t0: ",
+                    token0,
+                    " t1: ",
+                    token1,
+                    " symbol0: ",
+                    symbol0,
+                    " symbol1: ",
+                    symbol1,
+                    "len cg0: ",
+                    len(coingecko_id0),
+                    "len cg1: ",
+                    len(coingecko_id1),
+                )
+                if len(coingecko_id0) == 1:
+                    token0_found = True
+                    tokens_list = add_token_list(
+                        tokens_list, token0, coingecko_id0[0], symbol0, decimal0
+                    )
+                    print("coingecko_id0: ", coingecko_id0[0])
+
+                if len(coingecko_id1) == 1:
+                    token1_found = True
+                    tokens_list = add_token_list(
+                        tokens_list, token1, coingecko_id1[0], symbol1, decimal1
+                    )
+                    print("coingecko_id1: ", coingecko_id1[0])
+
+                if token0_found == False and token1_found == False:
+                    pairs_to_remove.append(pair.pair_id)
+                    print("TO REMOVE: ", pair.pair_id)
+        print(
+            "list final_dex_pairs_list before remove: ",
+            len(final_dex_pairs_list),
+            " pairs to remove: ",
+            len(pairs_to_remove),
+        )
+        for p in pairs_to_remove:
+            for pairs_list in final_dex_pairs_list:
+                found = False
+                for pair in pairs_list:
+                    if pair.pair_id.lower() == p.lower():
+                        final_dex_pairs_list.remove(pairs_list)
+                        found = True
+                        break
+                if found == True:
+                    break
+        TOKENS_PRICES_LIST = tokens_list
+        print(
+            "list final_dex_pairs_list before remove: ",
+            len(final_dex_pairs_list),
+            " TOKENS_PRICES_LIST: ",
+            len(TOKENS_PRICES_LIST),
+        )
+    except Exception as e:
+        print("process_dex_pairs_list_tokens error: ", e)
+
+    return final_dex_pairs_list
+
+
+def get_coingecko_id_by_symbol(symbol, token):
+    global COINGECKO_TOKEN_LIST
+    ids = []
+    token_details_url = config["coingecko_tokens_details_url"]
+    for item in COINGECKO_TOKEN_LIST:
+        if item["symbol"].lower() == symbol.lower():
+            ids.append(item["id"])
+    if len(ids) > 1:
+        correct_id = ""
+        found = False
+        for id in ids:
+            id_retrived = ""
+            try:
+                id_retrived = get_coingecko_token_details(
+                    token_details_url.replace("@token_id", id)
+                )
+            except:
+                continue
+            if id_retrived.lower() == token.lower():
+                correct_id = id
+                found = True
+                break
+        if found == True:
+            ids = []
+            ids.append(correct_id)
+        else:
+            ids = []
+
+    return ids
+
+
+def add_token_list(tokens_list, token, coingecko_id, symbol, decimal):
+    info = None
+    try:
+        info = next(x for x in tokens_list if x.token.lower() == token.lower())
+    except:
+        pass
+    if info == None:
+        t_c_p = tokens_coingecko_price(token, coingecko_id, symbol, decimal, 0)
+        tokens_list.append(t_c_p)
+    return tokens_list
 
 
 def get_dex_pairs_list(dex_info):
@@ -137,6 +273,8 @@ def dex_info_processor():
         print("--------------------------------------------------")
         print("Processing pairs ....")
         final_dex_pairs_list = get_dex_pairs_list(dex_info)
+        print("Setup the pairs list based on Coingecko Tokens price list")
+        final_dex_pairs_list = process_dex_pairs_list_tokens(final_dex_pairs_list)
         if bool(config["remove_min_threshould_pairs"]):
             lst_total = len(final_dex_pairs_list)
             print(
@@ -323,6 +461,7 @@ def fill_dex_info():
     global DEX_INFO_LIST
     while True:
         try:
+            coingecko_list_tokens()
             date_time_current = datetime.now()
             date_time_next = date_time_current + timedelta(
                 minutes=int(config["dex_info_process_cicle_minutes"])
@@ -480,7 +619,7 @@ def check_profitability(dex_pair_final_list):
                     )
                     if net_profit_usd > 0:
                         print(
-                            f"Profit found: pair: {_pairAddress} token to borrow: {_tokenBorrow} amount: {_amountTokenPay} net profit USD: {net_profit_usd}"
+                            f"Profit found: pair: {_pairAddress} token out: {_dex_pair_final.tokens[1]} amount: {_amountTokenPay} net profit USD: {net_profit_usd}"
                         )
                         with concurrent.futures.ThreadPoolExecutor() as executor:
                             start_s = executor.submit(
@@ -539,7 +678,7 @@ def check_profitability(dex_pair_final_list):
                     )
                     if net_profit_usd > 0:
                         print(
-                            f"Profit found: pair: {_pairAddress} token to borrow: {_tokenBorrow} amount: {_amountTokenPay} net profit USD: {net_profit_usd}"
+                            f"Profit found: pair: {_pairAddress} token out: {_dex_pair_final.tokens[0]} amount: {_amountTokenPay} net profit USD: {net_profit_usd}"
                         )
                         with concurrent.futures.ThreadPoolExecutor() as executor:
                             start_s = executor.submit(
@@ -571,6 +710,16 @@ def check_profitability(dex_pair_final_list):
             )
 
 
+def update_tokens_price():
+    global TOKENS_PRICES_LIST
+    if len(TOKENS_PRICES_LIST) > 0:
+        print("Update prices")
+        for c_t in TOKENS_PRICES_LIST:
+            price = get_prices(c_t.coingecko_id)
+            c_t.usdPrice = price
+            print(f"token: {c_t.token} symbol: {c_t.symbol} price: {price}")
+
+
 def fill_prices_info():
     global PRICES
     global GAS
@@ -579,10 +728,9 @@ def fill_prices_info():
     account = get_account()
     while True:
         try:
-            # Prices
-            pr = get_prices()
-            if len(pr) > 0:
-                PRICES = pr
+            # update prices
+            update_tokens_price()
+            PRICES = {}
             # Gas
             gas_oracle = get_gas()
             if config["gas_type"] == "fast":
@@ -631,12 +779,12 @@ def get_amount_usd_value(token_borrow, amount, reserve0, reserve1, token0, token
     pos = -1
     usd_price = 0.0
     try:
-        token0_price = Decimal(PRICES[token0])
+        token0_price = Decimal(get_token_price(token0))
         pos = 0
     except:
         pass
     try:
-        token1_price = Decimal(PRICES[token1])
+        token1_price = Decimal(get_token_price(token1))
         pos = 1
     except:
         pass
@@ -683,10 +831,9 @@ def execution_cost(profit):
     max_base_fee_per_gas = base_fee_per_gas + max_priority_fee
     max_base_fee_per_gas_wei = int(Decimal(max_base_fee_per_gas) * (Decimal(10) ** 9))
     max_base_fee_per_gas_ether = web3.fromWei(max_base_fee_per_gas_wei, "ether")
-    eth_price = Decimal(PRICES[config["token_weth"].lower()])
+    eth_price = Decimal(get_token_price(config["token_weth"].lower()))
     gas_limit = int(config["gas_limit_start_swap"])
     cost = (eth_price * max_base_fee_per_gas_ether) * gas_limit
-    latest_block = web3.eth.getBlock("latest")
 
     return (
         int(max_base_fee_per_gas),
@@ -694,6 +841,38 @@ def execution_cost(profit):
         round(cost, 2),
         gas_limit,
     )
+
+
+def swap_cost_to_weth(gas_limit, amount_profit):
+    global GAS
+    global SUGGEST_BASE_FEE
+    global PRICES
+    max_priority_fee = Decimal(GAS) - Decimal(SUGGEST_BASE_FEE)
+    base_fee_per_gas = Decimal(GAS) * Decimal(config["base_fee_multiplier"])
+
+    max_base_fee_per_gas = base_fee_per_gas + max_priority_fee
+    max_base_fee_per_gas_wei = int(Decimal(max_base_fee_per_gas) * (Decimal(10) ** 9))
+    max_base_fee_per_gas_ether = web3.fromWei(max_base_fee_per_gas_wei, "ether")
+    eth_price = Decimal(get_token_price(config["token_weth"].lower()))
+    cost = (eth_price * max_base_fee_per_gas_ether) * gas_limit
+    profit_usd = Decimal(amount_profit / 10**18) * Decimal(eth_price)
+
+    return (
+        int(max_base_fee_per_gas),
+        int(max_priority_fee),
+        round(cost, 2),
+        round(profit_usd, 2),
+    )
+
+
+def get_token_price(token):
+    price = 0
+    try:
+        token = token.lower()
+        price = next(x.usdPrice for x in TOKENS_PRICES_LIST if x.token == token)
+    except:
+        pass
+    return price
 
 
 def tst_fill_prices_info():
@@ -718,35 +897,16 @@ def tst_fill_prices_info():
     SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
 
 
-def swap_tokens(tokenIn, tokenOut, amountIn, account, json_abi):
+def swap_tokens_to_weth(tokenIn, tokenOut, amountIn, account, json_abi):
     global TOKENS_IN_WALLET_LIST
+    global DEX_INFO_LIST
     watcher = ChainWatcher[-1]
     flash = FlashSwap[-1]
+    maxAmountOut = 0
+    router = ""
     tokens = []
     tokens.append(tokenIn)
     tokens.append(tokenOut)
-    dx1 = dex(
-        "uniswap",
-        "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
-        "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-        "WETH",
-        1000,
-        True,
-        True,
-    )
-    dx2 = dex(
-        "sushiswap",
-        "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac",
-        "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F",
-        "WETH",
-        1000,
-        True,
-        True,
-    )
-    DEX_INFO_LIST.append(dx1)
-    DEX_INFO_LIST.append(dx2)
-    maxAmountOut = 0
-    router = ""
     for dx in DEX_INFO_LIST:
         amountOut = 0
         try:
@@ -756,44 +916,77 @@ def swap_tokens(tokenIn, tokenOut, amountIn, account, json_abi):
                 router = dx.router
         except Exception as e:
             continue
+
     if maxAmountOut > 0:
-        # Calculate estimate cost here with estimate gas
-        # Go if cost < profit
         min_depre = Decimal(config["min_depre_percentage_token_swap"])
         maxAmountOut = int(maxAmountOut - (maxAmountOut * (min_depre / 100)))
-        print(f"router: {router} maxAmountOut: {maxAmountOut}")
-        try:
-            token_contract = web3.eth.contract(
-                address=web3.toChecksumAddress(tokenIn.lower()),
-                abi=json_abi,
-            )
-            print(f"Start approve Flash contract to spend {amountIn} of {tokenIn}")
-            tx_hash = token_contract.functions.approve(
-                flash.address, amountIn
-            ).transact({"from": account.address})
-            x_receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
-            # Calcute real cost here. If cost steel < profit go
-            estimate_gas = swap_tokens_estimate_gas(
-                tokenIn,
-                tokenOut,
-                amountIn,
-                maxAmountOut,
-                router,
-            )
-            print(f"estimate_gas: {estimate_gas}")
-            print(
-                f"Start swap {amountIn} of {tokenIn} to at least {maxAmountOut} of {tokenOut}."
-            )
-            swap = flash.swap_tokens(
-                tokenIn, tokenOut, amountIn, maxAmountOut, router, {"from": account}
-            )
-            swap.wait(1)
-            if network.show_active() != "mainnet":
-                if tokenOut not in TOKENS_IN_WALLET_LIST:
-                    t_in_w = tokens_in_wallet(tokenOut, 0)
-                    TOKENS_IN_WALLET_LIST.append(t_in_w)
-        except Exception as e:
-            print("Error: ", e)
+        estimate_g = int(config["gas_limit_start_swap_tokens"])
+
+        (
+            _,
+            _,
+            cost_usd,
+            profit_usd,
+        ) = swap_cost_to_weth(estimate_g, maxAmountOut)
+        print(
+            f"check convert {amountIn} of {tokenIn} to weth. cost USD: {cost_usd} profit USD: {profit_usd}"
+        )
+        if profit_usd > cost_usd:
+            try:
+                token_contract = web3.eth.contract(
+                    address=web3.toChecksumAddress(tokenIn.lower()),
+                    abi=json_abi,
+                )
+                allowance = token_contract.functions.allowance(
+                    account.address, flash.address
+                ).call()
+                if allowance < amountIn:
+                    print(
+                        f"Start approve Flash contract to spend {amountIn} of {tokenIn}"
+                    )
+                    tx_hash = token_contract.functions.approve(
+                        flash.address, amountIn - allowance
+                    ).transact({"from": account.address})
+                    x_receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+
+                estimate_gas = swap_tokens_estimate_gas(
+                    tokenIn,
+                    tokenOut,
+                    amountIn,
+                    maxAmountOut,
+                    router,
+                )
+                (
+                    max_base_fee_per_gas,
+                    max_priority_fee,
+                    cost_real_usd,
+                    profit_usd,
+                ) = swap_cost_to_weth(estimate_gas, maxAmountOut)
+                print(f"cost_real_usd: {cost_real_usd} profit_usd: {profit_usd}")
+                if profit_usd > cost_real_usd:
+                    print(
+                        f"Start swap {amountIn} of {tokenIn} to at least {maxAmountOut} of {tokenOut}."
+                    )
+                    swap = flash.swap_tokens(
+                        tokenIn,
+                        tokenOut,
+                        amountIn,
+                        maxAmountOut,
+                        router,
+                        {
+                            "from": account,
+                            "gasLimit": estimate_gas,
+                            "maxFeePerGas": max_base_fee_per_gas,
+                            "maxPriorityFeePerGas": max_priority_fee,
+                        },
+                    )
+                    swap.wait(1)
+                    if network.show_active() != "mainnet":
+                        if tokenOut not in TOKENS_IN_WALLET_LIST:
+                            t_in_w = tokens_in_wallet(tokenOut, 0)
+                            TOKENS_IN_WALLET_LIST.append(t_in_w)
+            except Exception as e:
+                print("Error: ", e)
 
 
 def check_convertions(json_abi):
@@ -816,13 +1009,16 @@ def check_convertions(json_abi):
             else:
                 get_weth(minimum_weth_target_wei - weth_amount_wei)
 
-    swap_tokens(
-        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-        "0xdac17f958d2ee523a2206206994597c13d831ec7",
-        web3.toWei(1.0, "ether"),
-        account,
-        json_abi,
-    )
+    TOKENS_IN_WALLET_LIST = get_tokens_in_wallet(json_abi, account)
+    for t in TOKENS_IN_WALLET_LIST:
+        if t.token.lower() != config["token_weth"].lower():
+            swap_tokens_to_weth(
+                t.token.lower(),
+                config["token_weth"].lower(),
+                t.amount,
+                account,
+                json_abi,
+            )
 
 
 def check_balance(json_abi):
@@ -837,12 +1033,13 @@ def check_balance(json_abi):
 
     check_convertions(json_abi)
     TOKENS_IN_WALLET_LIST = get_tokens_in_wallet(json_abi, account)
-    if len(PRICES) > 0:
+    if len(TOKENS_PRICES_LIST) > 0:
         ether_amount = web3.fromWei(web3.eth.getBalance(account.address), "ether")
-        ether_amount_usd = round(
-            ether_amount * Decimal(PRICES[config["token_weth"]]), 2
-        )
-        print(f"Ether amount: {ether_amount} Ether USD: {ether_amount_usd}")
+        if ether_amount > 0:
+            ether_amount_usd = round(
+                ether_amount * Decimal(get_token_price(config["token_weth"]), 2)
+            )
+            print(f"Ether amount: {ether_amount} Ether USD: {ether_amount_usd}")
 
         print("Tokens in wallet:")
         count = 0
@@ -853,12 +1050,11 @@ def check_balance(json_abi):
                 if tk.token == config["token_weth"]:
                     amount_usd = round(
                         web3.fromWei(tk.amount, "ether")
-                        * Decimal(PRICES[config["token_weth"]]),
+                        * Decimal(get_token_price(config["token_weth"])),
                         2,
                     )
-                    amount_ether = web3.fromWei(tk.amount, "ether")
                     print(
-                        f"{count} - token: {tk.token} amount: {amount_ether} USD: {amount_usd}"
+                        f"{count} - token: {tk.token} amount: {tk.amount} USD: {amount_usd}"
                     )
                 else:
                     print(f"{count} - token: {tk.token} amount: {tk.amount}")
@@ -1033,7 +1229,38 @@ def test():
     )
 
 
-def main():
+def main3():
+    ids = []
+    ids.append("dai")
+    ids.append("dai-wormhole")
+    token = "0x6b175474e89094c44da98b954eedeac495271d0f"
+    token_details_url = config["coingecko_tokens_details_url"]
+    if len(ids) > 1:
+        correct_id = ""
+        found = False
+        for id in ids:
+            id_retrived = ""
+            try:
+                id_retrived = get_coingecko_token_details(
+                    token_details_url.replace("@token_id", id)
+                )
+                print("id_retrived: ", id_retrived)
+            except Exception as e:
+                print("Error: ", e)
+                continue
+            if id_retrived.lower() == token.lower():
+                correct_id = id
+                found = True
+                break
+        if found == True:
+            ids = []
+            ids.append(correct_id)
+        else:
+            ids = []
+    print("len: ", len(ids))
+
+
+def main2():
     global WETH_ABI
     deploy_flash_swap()
     deploy_watcher()
@@ -1152,7 +1379,7 @@ def main1():
     check_profitability(list_final)
 
 
-def main0():
+def main():
     global WETH_ABI
     WETH_ABI = get_etherscan_weth_abi()
     check_balance(WETH_ABI)
