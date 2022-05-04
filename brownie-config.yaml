@@ -9,6 +9,8 @@ liquidity_pairs_list_percentage: 25
 dex_info_process_cicle_minutes: 720
 percentage_amount_to_use: 80
 top_percentage_amount_to_request: 95
+max_retry_in_price_retrieve_error: 10
+valid_price_time_windows_minutes: 5
 coingecko_prices_url: "https://api.coingecko.com/api/v3/simple/price?ids=@coingecko_id&vs_currencies=usd"
 gasoracle_url: "https://api.etherscan.io/api?module=gastracker&action=gasoracle&apikey=76EIAGPFFB8GNK9Z8IGEAN85DMZER3DMN4"
 etherscan_weth_abi: "https://api.etherscan.io/api?module=contract&action=getabi&address=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2&apikey=76EIAGPFFB8GNK9Z8IGEAN85DMZER3DMN4"
@@ -20,7 +22,7 @@ gas_type: "fast"
 base_fee_multiplier: 2.0
 gas_limit_start_swap: 330000
 gas_limit_start_swap_tokens: 300000
-coingecko_prices_refresh_seconds: 100
+coingecko_prices_refresh_seconds: 20
 token_value_min_threshould: 1000.00
 min_depre_percentage_token_swap: 0.5
 remove_min_threshould_pairs: False

@@ -3,6 +3,7 @@ from brownie import config
 import json
 from scripts.classes import ethgasoracle
 from decimal import Decimal
+import time
 
 
 def run_query_post(query, url):
@@ -19,11 +20,19 @@ def run_query_post(query, url):
         return "Query failed. return code is {}. {}".format(response.status_code, query)
 
 
-def get_prices_data(coingecko_id):
+def get_prices_data(coingecko_id, retry):
     url = config["coingecko_prices_url"]
-    url.replace("@coingecko_id", coingecko_id)
+    url = url.replace("@coingecko_id", coingecko_id)
     response = requests.get(url, timeout=10)
-    j = json.loads(response.content.decode("utf-8"))
+    retry_total = int(config["max_retry_in_price_retrieve_error"])
+    j = {coingecko_id: {"usd": 0}}
+    if response.status_code == 200:
+        j = json.loads(response.content.decode("utf-8"))
+    elif response.status_code == 429:
+        if retry > 0:
+            retry = retry - 1
+            time.sleep(retry_total - retry)
+            get_prices_data(coingecko_id, retry)
     return j
 
 

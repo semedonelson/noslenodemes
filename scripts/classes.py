@@ -115,12 +115,13 @@ class final_profitable_pairs:
 
 
 class tokens_coingecko_price:
-    def __init__(self, token, coingecko_id, symbol, decimal, usdPrice):
+    def __init__(self, token, coingecko_id, symbol, decimal, usdPrice, lastUpdateTime):
         self.token = token
         self.coingecko_id = coingecko_id
         self.symbol = symbol
         self.decimal = decimal
         self.usdPrice = usdPrice
+        self.lastUpdateTime = lastUpdateTime
 
 
 class ethgasoracle:

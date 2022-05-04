@@ -96,6 +96,8 @@ def process_dex_pairs_list_tokens(final_dex_pairs_list):
     global TOKENS_PRICES_LIST
     tokens_list = []
     pairs_to_remove = []
+    tokens_added = []
+    tokens_not_found = []
     print("Staring setup tokens price list ...")
     try:
         for pairs_list in final_dex_pairs_list:
@@ -108,48 +110,40 @@ def process_dex_pairs_list_tokens(final_dex_pairs_list):
                 symbol1 = pair.token1["symbol"]
                 decimal0 = pair.token0["decimals"]
                 decimal1 = pair.token1["decimals"]
-                # Se o token não existir no tokens_list. Mudar o metodo add_token_list para se existir t or f. Ou manter este metodo e ter criar
-                # uma lista com os tokens já adicionados.
-                # Também ter uma lista dos tokens que não existe, para não serem executados novamente
-                coingecko_id0 = get_coingecko_id_by_symbol(symbol0, token0)
-                coingecko_id1 = get_coingecko_id_by_symbol(symbol1, token1)
-                print(
-                    "t0: ",
-                    token0,
-                    " t1: ",
-                    token1,
-                    " symbol0: ",
-                    symbol0,
-                    " symbol1: ",
-                    symbol1,
-                    "len cg0: ",
-                    len(coingecko_id0),
-                    "len cg1: ",
-                    len(coingecko_id1),
-                )
-                if len(coingecko_id0) == 1:
-                    token0_found = True
-                    tokens_list = add_token_list(
-                        tokens_list, token0, coingecko_id0[0], symbol0, decimal0
-                    )
-                    print("coingecko_id0: ", coingecko_id0[0])
 
-                if len(coingecko_id1) == 1:
-                    token1_found = True
-                    tokens_list = add_token_list(
-                        tokens_list, token1, coingecko_id1[0], symbol1, decimal1
-                    )
-                    print("coingecko_id1: ", coingecko_id1[0])
+                if token0 not in tokens_not_found:
+                    if token0 not in tokens_added:
+                        coingecko_id0 = get_coingecko_id_by_symbol(symbol0, token0)
+                        if len(coingecko_id0) == 1:
+                            token0_found = True
+                            t_c_p = tokens_coingecko_price(
+                                token0, coingecko_id0[0], symbol0, decimal0, 0, 0
+                            )
+                            tokens_list.append(t_c_p)
+                            tokens_added.append(token0)
+                        else:
+                            tokens_not_found.append(token0)
+                    else:
+                        token0_found = True
+
+                if token1 not in tokens_not_found:
+                    if token1 not in tokens_added:
+                        coingecko_id1 = get_coingecko_id_by_symbol(symbol1, token1)
+                        if len(coingecko_id1) == 1:
+                            token1_found = True
+                            t_c_p = tokens_coingecko_price(
+                                token1, coingecko_id1[0], symbol1, decimal1, 0, 0
+                            )
+                            tokens_list.append(t_c_p)
+                            tokens_added.append(token1)
+                        else:
+                            tokens_not_found.append(token1)
+                    else:
+                        token1_found = True
 
                 if token0_found == False and token1_found == False:
                     pairs_to_remove.append(pair.pair_id)
-                    print("TO REMOVE: ", pair.pair_id)
-        print(
-            "list final_dex_pairs_list before remove: ",
-            len(final_dex_pairs_list),
-            " pairs to remove: ",
-            len(pairs_to_remove),
-        )
+
         for p in pairs_to_remove:
             for pairs_list in final_dex_pairs_list:
                 found = False
@@ -204,6 +198,7 @@ def get_coingecko_id_by_symbol(symbol, token):
     return ids
 
 
+"""
 def add_token_list(tokens_list, token, coingecko_id, symbol, decimal):
     info = None
     try:
@@ -211,9 +206,9 @@ def add_token_list(tokens_list, token, coingecko_id, symbol, decimal):
     except:
         pass
     if info == None:
-        t_c_p = tokens_coingecko_price(token, coingecko_id, symbol, decimal, 0)
-        tokens_list.append(t_c_p)
+        pass
     return tokens_list
+"""
 
 
 def get_dex_pairs_list(dex_info):
@@ -713,11 +708,12 @@ def check_profitability(dex_pair_final_list):
 def update_tokens_price():
     global TOKENS_PRICES_LIST
     if len(TOKENS_PRICES_LIST) > 0:
-        print("Update prices")
         for c_t in TOKENS_PRICES_LIST:
             price = get_prices(c_t.coingecko_id)
-            c_t.usdPrice = price
-            print(f"token: {c_t.token} symbol: {c_t.symbol} price: {price}")
+            if price > 0:
+                date_time_current = datetime.now()
+                c_t.usdPrice = price
+                c_t.lastUpdateTime = date_time_current
 
 
 def fill_prices_info():
@@ -749,6 +745,7 @@ def fill_prices_info():
         except:
             error = traceback.format_exc()
             print(f"fill_prices_info error: {error}")
+            break
 
 
 def swap_tokens_estimate_gas(
@@ -866,10 +863,26 @@ def swap_cost_to_weth(gas_limit, amount_profit):
 
 
 def get_token_price(token):
-    price = 0
+    global TOKENS_PRICES_LIST
+    price = 0.00
     try:
-        token = token.lower()
-        price = next(x.usdPrice for x in TOKENS_PRICES_LIST if x.token == token)
+        if len(TOKENS_PRICES_LIST) > 0:
+            token = token.lower()
+            price, lastTime = next(
+                (x.usdPrice, x.lastUpdateTime)
+                for x in TOKENS_PRICES_LIST
+                if x.token == token
+            )
+            date_time_current = datetime.now()
+            if (
+                lastTime
+                + timedelta(
+                    minutes=max(int(config["valid_price_time_windows_minutes"]), 1)
+                )
+                < date_time_current
+            ):
+                price = 0.00
+
     except:
         pass
     return price
@@ -1025,6 +1038,7 @@ def check_balance(json_abi):
     global WETH_BALANCE
     global PRICES
     global TOKENS_IN_WALLET_LIST
+    global TOKENS_PRICES_LIST
     account = get_account()
 
     if len(TOKENS_IN_WALLET_LIST) == 0:
@@ -1213,51 +1227,9 @@ def no_multithreads_sending_swaps():
             print("Error: ", error)
 
 
-def test():
-    global GAS
-    global SUGGEST_BASE_FEE
-    fill_prices_info()
-    (
-        max_base_fee_per_gas,
-        max_priority_fee,
-        cost,
-        gas_limit,
-    ) = execution_cost(100000)
-    print(f"GAS: {GAS} SUGGEST_BASE_FEE: {SUGGEST_BASE_FEE}")
-    print(
-        f"max_base_fee: {max_base_fee_per_gas} max_priority_fee: {max_priority_fee} cost: {cost} gas_limit: {gas_limit}"
-    )
-
-
 def main3():
-    ids = []
-    ids.append("dai")
-    ids.append("dai-wormhole")
-    token = "0x6b175474e89094c44da98b954eedeac495271d0f"
-    token_details_url = config["coingecko_tokens_details_url"]
-    if len(ids) > 1:
-        correct_id = ""
-        found = False
-        for id in ids:
-            id_retrived = ""
-            try:
-                id_retrived = get_coingecko_token_details(
-                    token_details_url.replace("@token_id", id)
-                )
-                print("id_retrived: ", id_retrived)
-            except Exception as e:
-                print("Error: ", e)
-                continue
-            if id_retrived.lower() == token.lower():
-                correct_id = id
-                found = True
-                break
-        if found == True:
-            ids = []
-            ids.append(correct_id)
-        else:
-            ids = []
-    print("len: ", len(ids))
+    price = get_prices("weth")
+    print("price: ", price)
 
 
 def main2():
