@@ -191,19 +191,6 @@ def get_coingecko_id_by_symbol(symbol, token):
     return ids
 
 
-"""
-def add_token_list(tokens_list, token, coingecko_id, symbol, decimal):
-    info = None
-    try:
-        info = next(x for x in tokens_list if x.token.lower() == token.lower())
-    except:
-        pass
-    if info == None:
-        pass
-    return tokens_list
-"""
-
-
 def get_dex_pairs_list(dex_info):
     dx_processed = []
     watcher = ChainWatcher[-1]
@@ -801,7 +788,7 @@ def swap_cost_to_weth(gas_limit, amount_profit):
     global GAS
     global SUGGEST_BASE_FEE
     max_priority_fee = Decimal(GAS) - Decimal(SUGGEST_BASE_FEE)
-    base_fee_per_gas = Decimal(GAS) * Decimal(config["base_fee_multiplier"])
+    base_fee_per_gas = Decimal(GAS) * Decimal(config["token_swap_base_fee_multiplier"])
 
     max_base_fee_per_gas = base_fee_per_gas + max_priority_fee
     max_base_fee_per_gas_wei = int(Decimal(max_base_fee_per_gas) * (Decimal(10) ** 9))
@@ -844,6 +831,35 @@ def get_token_price(token):
     return price
 
 
+def get_token_amount_price(token, amount):
+    global TOKENS_PRICES_LIST
+    price = 0.00
+    value = 0.00
+    try:
+        if len(TOKENS_PRICES_LIST) > 0:
+            token = token.lower()
+            price, lastTime, decimal = next(
+                (x.usdPrice, x.lastUpdateTime, x.decimal)
+                for x in TOKENS_PRICES_LIST
+                if x.token == token
+            )
+            date_time_current = datetime.now()
+            if (
+                lastTime
+                + timedelta(
+                    minutes=max(int(config["valid_price_time_windows_minutes"]), 1)
+                )
+                < date_time_current
+            ):
+                value = 0.00
+            else:
+                value = Decimal(price) * Decimal(amount / Decimal(10 ** int(decimal)))
+
+    except:
+        pass
+    return value
+
+
 def tst_fill_prices_info():
     global GAS
     global SUGGEST_BASE_FEE
@@ -861,7 +877,7 @@ def tst_fill_prices_info():
     SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
 
 
-def swap_tokens_to_weth(tokenIn, tokenOut, amountIn, account, json_abi):
+def swap_tokens_to_another(tokenIn, tokenOut, amountIn, account, json_abi):
     global TOKENS_IN_WALLET_LIST
     global DEX_INFO_LIST
     watcher = ChainWatcher[-1]
@@ -895,7 +911,7 @@ def swap_tokens_to_weth(tokenIn, tokenOut, amountIn, account, json_abi):
         print(
             f"check convert {amountIn} of {tokenIn} to weth. cost USD: {cost_usd} profit USD: {profit_usd}"
         )
-        if profit_usd > cost_usd:
+        if profit_usd > cost_usd and cost_usd > 0:
             try:
                 token_contract = web3.eth.contract(
                     address=web3.toChecksumAddress(tokenIn.lower()),
@@ -927,7 +943,7 @@ def swap_tokens_to_weth(tokenIn, tokenOut, amountIn, account, json_abi):
                     profit_usd,
                 ) = swap_cost_to_weth(estimate_gas, maxAmountOut)
                 print(f"cost_real_usd: {cost_real_usd} profit_usd: {profit_usd}")
-                if profit_usd > cost_real_usd:
+                if profit_usd > cost_real_usd and cost_real_usd > 0:
                     print(
                         f"Start swap {amountIn} of {tokenIn} to at least {maxAmountOut} of {tokenOut}."
                     )
@@ -976,7 +992,7 @@ def check_convertions(json_abi):
     TOKENS_IN_WALLET_LIST = get_tokens_in_wallet(json_abi, account)
     for t in TOKENS_IN_WALLET_LIST:
         if t.token.lower() != config["token_weth"].lower():
-            swap_tokens_to_weth(
+            swap_tokens_to_another(
                 t.token.lower(),
                 config["token_weth"].lower(),
                 t.amount,
@@ -1011,17 +1027,8 @@ def check_balance(json_abi):
         for tk in TOKENS_IN_WALLET_LIST:
             if tk.amount > 0:
                 count += 1
-                if tk.token == config["token_weth"]:
-                    amount_usd = round(
-                        web3.fromWei(tk.amount, "ether")
-                        * Decimal(get_token_price(config["token_weth"])),
-                        2,
-                    )
-                    print(
-                        f"{count} - token: {tk.token} amount: {tk.amount} USD: {amount_usd}"
-                    )
-                else:
-                    print(f"{count} - token: {tk.token} amount: {tk.amount}")
+                value = round(get_token_amount_price(tk.token, tk.amount), 2)
+                print(f"{count} - Token: {tk.token} Amount: {tk.amount} USD: {value}")
 
 
 def start_swap(
