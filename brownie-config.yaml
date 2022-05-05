@@ -22,7 +22,8 @@ gas_type: "fast"
 base_fee_multiplier: 2.0
 gas_limit_start_swap: 330000
 gas_limit_start_swap_tokens: 300000
-coingecko_prices_refresh_seconds: 20
+coingecko_metrics_refresh_seconds: 20
+coingecko_prices_refresh_seconds: 60
 token_value_min_threshould: 1000.00
 min_depre_percentage_token_swap: 0.5
 remove_min_threshould_pairs: False

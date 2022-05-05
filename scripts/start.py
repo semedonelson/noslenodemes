@@ -44,7 +44,6 @@ MOST_TRADED_PAIRS_LIST = []
 LESS_TRADED_PAIRS_LIST = []
 PAIRS_LIST_TO_REMOVE = []
 DEX_INFO_LIST = []
-PRICES = {}
 GAS = 0.0
 SUGGEST_BASE_FEE = 0.0
 WETH_BALANCE = 0
@@ -155,12 +154,6 @@ def process_dex_pairs_list_tokens(final_dex_pairs_list):
                 if found == True:
                     break
         TOKENS_PRICES_LIST = tokens_list
-        print(
-            "list final_dex_pairs_list before remove: ",
-            len(final_dex_pairs_list),
-            " TOKENS_PRICES_LIST: ",
-            len(TOKENS_PRICES_LIST),
-        )
     except Exception as e:
         print("process_dex_pairs_list_tokens error: ", e)
 
@@ -290,12 +283,6 @@ def dex_info_processor():
                             item.token0["id"].lower(),
                             Decimal(reserve0)
                             / Decimal(10 ** int(item.token0["decimals"])),
-                            Decimal(reserve0)
-                            / Decimal(10 ** int(item.token0["decimals"])),
-                            Decimal(reserve1)
-                            / Decimal(10 ** int(item.token1["decimals"])),
-                            item.token0["id"].lower(),
-                            item.token1["id"].lower(),
                         )
                         if token0_value_usd < Decimal(
                             config["token_value_min_threshould"]
@@ -305,12 +292,6 @@ def dex_info_processor():
                             item.token1["id"].lower(),
                             Decimal(reserve1)
                             / Decimal(10 ** int(item.token1["decimals"])),
-                            Decimal(reserve0)
-                            / Decimal(10 ** int(item.token0["decimals"])),
-                            Decimal(reserve1)
-                            / Decimal(10 ** int(item.token1["decimals"])),
-                            item.token0["id"].lower(),
-                            item.token1["id"].lower(),
                         )
                         if token1_value_usd < Decimal(
                             config["token_value_min_threshould"]
@@ -586,20 +567,18 @@ def check_profitability(dex_pair_final_list):
                     _amountProfit_d = Decimal(profit) / Decimal(
                         10 ** int(_dex_pair_final.decimals[1])
                     )
+                    """
                     reserve0_d = Decimal(dex0_reserve0) / Decimal(
                         10 ** int(_dex_pair_final.decimals[0])
                     )
                     reserve1_d = Decimal(dex0_reserve1) / Decimal(
                         10 ** int(_dex_pair_final.decimals[1])
                     )
+                    """
                     gross_profit_usd = round(
                         get_amount_usd_value(
-                            _tokenBorrow.lower(),
-                            _amountProfit_d,
-                            reserve0_d,
-                            reserve1_d,
-                            _dex_pair_final.tokens[0].lower(),
                             _dex_pair_final.tokens[1].lower(),
+                            _amountProfit_d,
                         ),
                         2,
                     )
@@ -645,20 +624,18 @@ def check_profitability(dex_pair_final_list):
                     _amountProfit_d = Decimal(profit) / Decimal(
                         10 ** int(_dex_pair_final.decimals[0])
                     )
+                    """
                     reserve0_d = Decimal(dex1_reserve0) / Decimal(
                         10 ** int(_dex_pair_final.decimals[0])
                     )
                     reserve1_d = Decimal(dex1_reserve1) / Decimal(
                         10 ** int(_dex_pair_final.decimals[1])
                     )
+                    """
                     gross_profit_usd = round(
                         get_amount_usd_value(
-                            _tokenBorrow.lower(),
-                            _amountProfit_d,
-                            reserve0_d,
-                            reserve1_d,
                             _dex_pair_final.tokens[0].lower(),
-                            _dex_pair_final.tokens[1].lower(),
+                            _amountProfit_d,
                         ),
                         2,
                     )
@@ -707,26 +684,24 @@ def check_profitability(dex_pair_final_list):
 
 def update_tokens_price():
     global TOKENS_PRICES_LIST
-    if len(TOKENS_PRICES_LIST) > 0:
-        for c_t in TOKENS_PRICES_LIST:
-            price = get_prices(c_t.coingecko_id)
-            if price > 0:
-                date_time_current = datetime.now()
-                c_t.usdPrice = price
-                c_t.lastUpdateTime = date_time_current
+    while True:
+        if len(TOKENS_PRICES_LIST) > 0:
+            for c_t in TOKENS_PRICES_LIST:
+                price = get_prices(c_t.coingecko_id)
+                if price > 0:
+                    date_time_current = datetime.now()
+                    c_t.usdPrice = price
+                    c_t.lastUpdateTime = date_time_current
+        time.sleep(int(config["coingecko_prices_refresh_seconds"]))
 
 
-def fill_prices_info():
-    global PRICES
+def fill_metrics_info():
     global GAS
     global SUGGEST_BASE_FEE
     WETH_ABI = get_etherscan_weth_abi()
     account = get_account()
     while True:
         try:
-            # update prices
-            update_tokens_price()
-            PRICES = {}
             # Gas
             gas_oracle = get_gas()
             if config["gas_type"] == "fast":
@@ -741,7 +716,7 @@ def fill_prices_info():
             SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
             check_balance(WETH_ABI)
             # sleep
-            time.sleep(int(config["coingecko_prices_refresh_seconds"]))
+            time.sleep(int(config["coingecko_metrics_refresh_seconds"]))
         except:
             error = traceback.format_exc()
             print(f"fill_prices_info error: {error}")
@@ -769,39 +744,21 @@ def swap_tokens_estimate_gas(
     print(f"Est. Gas:  {estimated_gas}")
 
 
-def get_amount_usd_value(token_borrow, amount, reserve0, reserve1, token0, token1):
-    global PRICES
-    token0_price = 0.0
-    token1_price = 0.0
-    pos = -1
-    usd_price = 0.0
+def get_amount_usd_value(token, amount):
+    usd_price = 0.00
+    token_price = 0.00
     try:
-        token0_price = Decimal(get_token_price(token0))
-        pos = 0
+        token_price = get_token_price(token)
     except:
         pass
-    try:
-        token1_price = Decimal(get_token_price(token1))
-        pos = 1
-    except:
-        pass
-    if pos > -1:
-        if token_borrow == token0 and pos == 0:
-            usd_price = Decimal(amount * token0_price)
-        elif token_borrow == token1 and pos == 1:
-            usd_price = Decimal(amount * token1_price)
-        else:
-            if token_borrow == token0:
-                usd_price = Decimal(((reserve1 / reserve0) * token1_price) * amount)
-            elif token_borrow == token1:
-                usd_price = Decimal(((reserve0 / reserve1) * token0_price) * amount)
+
+    usd_price = Decimal(amount) * Decimal(token_price)
     return usd_price
 
 
 def execution_cost(profit):
     global GAS
     global SUGGEST_BASE_FEE
-    global PRICES
     max_priority_fee = Decimal(GAS) - Decimal(SUGGEST_BASE_FEE)
     base_fee_per_gas = Decimal(GAS) * Decimal(config["base_fee_multiplier"])
 
@@ -843,7 +800,6 @@ def execution_cost(profit):
 def swap_cost_to_weth(gas_limit, amount_profit):
     global GAS
     global SUGGEST_BASE_FEE
-    global PRICES
     max_priority_fee = Decimal(GAS) - Decimal(SUGGEST_BASE_FEE)
     base_fee_per_gas = Decimal(GAS) * Decimal(config["base_fee_multiplier"])
 
@@ -889,13 +845,8 @@ def get_token_price(token):
 
 
 def tst_fill_prices_info():
-    global PRICES
     global GAS
     global SUGGEST_BASE_FEE
-    # Prices
-    pr = get_prices()
-    if len(pr) > 0:
-        PRICES = pr
     # Gas
     gas_oracle = get_gas()
     if config["gas_type"] == "fast":
@@ -1036,7 +987,6 @@ def check_convertions(json_abi):
 
 def check_balance(json_abi):
     global WETH_BALANCE
-    global PRICES
     global TOKENS_IN_WALLET_LIST
     global TOKENS_PRICES_LIST
     account = get_account()
@@ -1051,7 +1001,7 @@ def check_balance(json_abi):
         ether_amount = web3.fromWei(web3.eth.getBalance(account.address), "ether")
         if ether_amount > 0:
             ether_amount_usd = round(
-                ether_amount * Decimal(get_token_price(config["token_weth"]), 2)
+                ether_amount * Decimal(get_token_price(config["token_weth"])), 2
             )
             print(f"Ether amount: {ether_amount} Ether USD: {ether_amount_usd}")
 
@@ -1198,11 +1148,13 @@ def no_multithreads_sending_swaps():
                 )
 
             if len(list_most_traded_pairs) > 0:
-                print("Start Executing Most Traded Pairs")
+                start_time = datetime.now()
+                print(f"{start_time} - Start Executing Most Traded Pairs")
             for dex_pair_final_list in list_most_traded_pairs:
                 check_profitability(dex_pair_final_list)
             if len(list_most_traded_pairs) > 0:
-                print("End Executing Most Traded Pairs")
+                end_time = datetime.now()
+                print(f"{end_time} - End Executing Most Traded Pairs")
             # ---------------------------------
             if len(PAIRS_LIST_TO_REMOVE) > 0:
                 (
@@ -1217,19 +1169,21 @@ def no_multithreads_sending_swaps():
             except:
                 pass
             if len(list_less_traded_pairs) > 0:
-                print("Start Executing Less Traded Pairs")
+                start_time = datetime.now()
+                print(f"{start_time} - Start Executing Less Traded Pairs")
             for dex_pair_final_list in list_less_traded_pairs:
                 check_profitability(dex_pair_final_list)
             if len(list_less_traded_pairs) > 0:
-                print("End Executing Less Traded Pairs")
+                end_time = datetime.now()
+                print(f"{end_time} - End Executing Less Traded Pairs")
         except:
             error = traceback.format_exc()
             print("Error: ", error)
 
 
 def main3():
-    price = get_prices("weth")
-    print("price: ", price)
+    dec = round(0, 2)
+    print(dec)
 
 
 def main2():
@@ -1358,9 +1312,10 @@ def main():
     deploy_watcher()
     deploy_flash_swap()
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        prices = executor.submit(fill_prices_info)
+        metrics = executor.submit(fill_metrics_info)
         dx_list = executor.submit(fill_dex_info)
         dx_proc = executor.submit(dex_info_processor)
+        prices = executor.submit(update_tokens_price)
         if bool(config["use_multithreads_for_sending_swaps"]):
             lst_most_traded = executor.submit(execute_most_traded_pairs)
             lst_less_traded = executor.submit(execute_less_traded_pairs)
@@ -1371,6 +1326,7 @@ def main():
             dx_proc.result(),
             lst_most_traded.result(),
             lst_less_traded.result(),
+            metrics.result(),
             prices.result(),
         )
 
