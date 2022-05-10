@@ -97,7 +97,7 @@ def process_dex_pairs_list_tokens(final_dex_pairs_list):
     pairs_to_remove = []
     tokens_added = []
     tokens_not_found = []
-    print("Staring setup tokens price list ...")
+    print("Starting setup tokens price list ...")
     try:
         for pairs_list in final_dex_pairs_list:
             token0_found = False
@@ -195,6 +195,7 @@ def get_dex_pairs_list(dex_info):
     dx_processed = []
     watcher = ChainWatcher[-1]
     final_dex_pairs_list = []
+    tokens_to_excluse = config["tokens_to_exclude"].split(";")
     for dx in dex_info:
         dx_processed.append(dx.name)
         for pair in dx.pairs:
@@ -214,6 +215,12 @@ def get_dex_pairs_list(dex_info):
                     for pair_m in dx_p.pairs:
                         dx_p_pair_m_token0_id = pair_m["token0"]["id"]
                         dx_p_pair_m_token1_id = pair_m["token1"]["id"]
+                        if (
+                            dx_p_pair_m_token0_id in tokens_to_excluse
+                            or dx_pair_token1_id in tokens_to_excluse
+                        ):
+                            continue
+
                         if (
                             dx_pair_token0_id == dx_p_pair_m_token0_id
                             and dx_pair_token1_id == dx_p_pair_m_token1_id
@@ -457,6 +464,7 @@ def fill_dex_info():
 
 
 def execute_most_traded_pairs():
+    global PAIRS_LIST_TO_REMOVE
     list_most_traded_pairs = []
     count = 0
     while True:
@@ -468,16 +476,37 @@ def execute_most_traded_pairs():
         except:
             pass
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            executor.map(check_profitability, list_most_traded_pairs)
+        try:
+            if len(PAIRS_LIST_TO_REMOVE) > 0:
+                (
+                    list_most_traded_pairs,
+                    PAIRS_LIST_TO_REMOVE,
+                ) = remove_pairs_with_errors(
+                    list_most_traded_pairs, PAIRS_LIST_TO_REMOVE
+                )
 
-        end = time.perf_counter()
-        total = round(end - start, 2)
-        if len(list_most_traded_pairs) > 0:
-            print(f" Most traded pairs Finished in {total} seconds cycle: {count}")
+            if bool(config["use_multithreads_for_sending_swaps"]):
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    executor.map(check_profitability, list_most_traded_pairs)
+            else:
+                for dex_pair_final_list in list_most_traded_pairs:
+                    check_profitability(dex_pair_final_list)
+
+            end = time.perf_counter()
+            total = round(end - start, 2)
+            if len(list_most_traded_pairs) > 0:
+                end_time = datetime.now()
+                print(
+                    f"{end_time} - Most traded pairs Finished in {total} seconds cycle: {count}"
+                )
+        except Exception as e:
+            # print("execute_most_traded_pairs error: ", e)
+            error = traceback.format_exc()
+            print("execute_most_traded_pairs error: ", error)
 
 
 def execute_less_traded_pairs():
+    global PAIRS_LIST_TO_REMOVE
     list_less_traded_pairs = []
     count = 0
     while True:
@@ -489,13 +518,31 @@ def execute_less_traded_pairs():
         except:
             pass
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            executor.map(check_profitability, list_less_traded_pairs)
+        try:
+            if len(PAIRS_LIST_TO_REMOVE) > 0:
+                (
+                    list_less_traded_pairs,
+                    PAIRS_LIST_TO_REMOVE,
+                ) = remove_pairs_with_errors(
+                    list_less_traded_pairs, PAIRS_LIST_TO_REMOVE
+                )
 
-        end = time.perf_counter()
-        total = round(end - start, 2)
-        if len(list_less_traded_pairs) > 0:
-            print(f" Less traded pairs Finished in {total} seconds cycle: {count}")
+            if bool(config["use_multithreads_for_sending_swaps"]):
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    executor.map(check_profitability, list_less_traded_pairs)
+            else:
+                for dex_pair_final_list in list_less_traded_pairs:
+                    check_profitability(dex_pair_final_list)
+
+            end = time.perf_counter()
+            total = round(end - start, 2)
+            if len(list_less_traded_pairs) > 0:
+                end_time = datetime.now()
+                print(
+                    f"{end_time} - Less traded pairs Finished in {total} seconds cycle: {count}"
+                )
+        except Exception as e:
+            print("execute_less_traded_pairs error: ", e)
 
 
 def check_profitability(dex_pair_final_list):
@@ -503,8 +550,20 @@ def check_profitability(dex_pair_final_list):
     watcher = ChainWatcher[-1]
     for _dex_pair_final in dex_pair_final_list:
         amounts = []
-        dex0_reserve0, dex0_reserve1 = watcher.getReservers(_dex_pair_final.pairs_id[0])
-        dex1_reserve0, dex1_reserve1 = watcher.getReservers(_dex_pair_final.pairs_id[1])
+        dex0_reserve0 = 0
+        dex0_reserve1 = 0
+        dex1_reserve0 = 0
+        dex1_reserve1 = 0
+        try:
+            dex0_reserve0, dex0_reserve1 = watcher.getReservers(
+                _dex_pair_final.pairs_id[0]
+            )
+            dex1_reserve0, dex1_reserve1 = watcher.getReservers(
+                _dex_pair_final.pairs_id[1]
+            )
+        except:
+            continue
+
         reserve0 = int(
             (int(config["percentage_amount_to_use"]) / 100)
             * min(dex0_reserve0, dex1_reserve0)
@@ -706,7 +765,7 @@ def fill_metrics_info():
             time.sleep(int(config["coingecko_metrics_refresh_seconds"]))
         except:
             error = traceback.format_exc()
-            print(f"fill_prices_info error: {error}")
+            print(f"fill_metrics_info error: {error}")
             break
 
 
@@ -1323,11 +1382,8 @@ def main():
         dx_list = executor.submit(fill_dex_info)
         dx_proc = executor.submit(dex_info_processor)
         prices = executor.submit(update_tokens_price)
-        if bool(config["use_multithreads_for_sending_swaps"]):
-            lst_most_traded = executor.submit(execute_most_traded_pairs)
-            lst_less_traded = executor.submit(execute_less_traded_pairs)
-        else:
-            exec_swaps = executor.submit(no_multithreads_sending_swaps)
+        lst_most_traded = executor.submit(execute_most_traded_pairs)
+        lst_less_traded = executor.submit(execute_less_traded_pairs)
         print(
             dx_list.result(),
             dx_proc.result(),
