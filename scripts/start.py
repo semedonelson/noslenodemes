@@ -12,6 +12,7 @@ from scripts.helpful_scripts import (
     get_etherscan_weth_abi,
     get_coingecko_token,
     get_coingecko_token_details,
+    get_deploy_cost,
 )
 from scripts.classes import (
     token,
@@ -65,11 +66,15 @@ def coingecko_list_tokens():
     print("Total of coingecko tokens: ", len(COINGECKO_TOKEN_LIST))
 
 
-def deploy_watcher():
-    account = get_account()
+def deploy_watcher(account, gasLimit, maxFeePerGas, maxPriorityFeePerGas):
     if len(ChainWatcher) == 0:
         watcher = ChainWatcher.deploy(
-            {"from": account},
+            {
+                "from": account,
+                "gasLimit": gasLimit,
+                "maxFeePerGas": maxFeePerGas,
+                "maxPriorityFeePerGas": maxPriorityFeePerGas,
+            },
         )
         print("Deployed Chain Watcher Contract!")
     else:
@@ -78,11 +83,15 @@ def deploy_watcher():
     return watcher, account
 
 
-def deploy_flash_swap():
-    account = get_account()
+def deploy_flash_swap(account, gasLimit, maxFeePerGas, maxPriorityFeePerGas):
     if len(FlashSwap) == 0:
         flash = FlashSwap.deploy(
-            {"from": account},
+            {
+                "from": account,
+                "gasLimit": gasLimit,
+                "maxFeePerGas": maxFeePerGas,
+                "maxPriorityFeePerGas": maxPriorityFeePerGas,
+            },
         )
         print("Deployed Flash Swap Contract!")
     else:
@@ -637,9 +646,9 @@ def check_profitability(dex_pair_final_list):
                     net_profit_usd = round(
                         Decimal(gross_profit_usd) - Decimal(exec_cost_usd), 2
                     )
-                    if net_profit_usd > 0:
+                    if net_profit_usd > 0 and exec_cost_usd > 0:
                         print(
-                            f"Profit found: pair: {_pairAddress} token out: {_dex_pair_final.tokens[1]} amount: {_amountTokenPay} net profit USD: {net_profit_usd}"
+                            f"Profit found: pair: {_pairAddress} Token Out: {_dex_pair_final.tokens[1]} Amount: {_amountTokenPay} Gross USD: {gross_profit_usd} Net USD: {net_profit_usd}"
                         )
                         with concurrent.futures.ThreadPoolExecutor() as executor:
                             start_s = executor.submit(
@@ -694,9 +703,9 @@ def check_profitability(dex_pair_final_list):
                     net_profit_usd = round(
                         Decimal(gross_profit_usd) - Decimal(exec_cost_usd), 2
                     )
-                    if net_profit_usd > 0:
+                    if net_profit_usd > 0 and exec_cost_usd > 0:
                         print(
-                            f"Profit found: pair: {_pairAddress} token out: {_dex_pair_final.tokens[0]} amount: {_amountTokenPay} net profit USD: {net_profit_usd}"
+                            f"Profit found: pair: {_pairAddress} Token Out: {_dex_pair_final.tokens[1]} Amount: {_amountTokenPay} Gross USD: {gross_profit_usd} Net USD: {net_profit_usd}"
                         )
                         with concurrent.futures.ThreadPoolExecutor() as executor:
                             start_s = executor.submit(
@@ -733,11 +742,14 @@ def update_tokens_price():
     while True:
         if len(TOKENS_PRICES_LIST) > 0:
             for c_t in TOKENS_PRICES_LIST:
-                price = get_prices(c_t.coingecko_id)
-                if price > 0:
-                    date_time_current = datetime.now()
-                    c_t.usdPrice = price
-                    c_t.lastUpdateTime = date_time_current
+                try:
+                    price = get_prices(c_t.coingecko_id)
+                    if price > 0:
+                        date_time_current = datetime.now()
+                        c_t.usdPrice = price
+                        c_t.lastUpdateTime = date_time_current
+                except:
+                    pass
         time.sleep(int(config["coingecko_prices_refresh_seconds"]))
 
 
@@ -750,23 +762,25 @@ def fill_metrics_info():
         try:
             # Gas
             gas_oracle = get_gas()
-            if config["gas_type"] == "fast":
-                GAS = gas_oracle.fastGasPrice
-            elif config["gas_type"] == "propose":
-                GAS = gas_oracle.proposeGasPrice
-            elif config["gas_type"] == "safe":
-                GAS = gas_oracle.safeGasPrice
-            else:
-                GAS = gas_oracle.fastGasPrice
+            if gas_oracle.fastGasPrice > 0:
+                if config["gas_type"] == "fast":
+                    GAS = gas_oracle.fastGasPrice
+                elif config["gas_type"] == "propose":
+                    GAS = gas_oracle.proposeGasPrice
+                elif config["gas_type"] == "safe":
+                    GAS = gas_oracle.safeGasPrice
+                else:
+                    GAS = gas_oracle.fastGasPrice
 
-            SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
+                SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
+
             check_balance(WETH_ABI)
             # sleep
-            time.sleep(int(config["coingecko_metrics_refresh_seconds"]))
+            time.sleep(int(config["metrics_refresh_seconds"]))
         except:
             error = traceback.format_exc()
             print(f"fill_metrics_info error: {error}")
-            break
+            pass
 
 
 def swap_tokens_estimate_gas(
@@ -834,7 +848,16 @@ def execution_cost(profit):
     eth_price = Decimal(get_token_price(config["token_weth"].lower()))
     gas_limit = int(config["gas_limit_start_swap"])
     cost = (eth_price * max_base_fee_per_gas_ether) * gas_limit
-
+    print(
+        "cost: ",
+        cost,
+        " eth_price: ",
+        eth_price,
+        " max_base_fee_per_gas_ether: ",
+        max_base_fee_per_gas_ether,
+        " gas_limit: ",
+        gas_limit,
+    )
     return (
         int(max_base_fee_per_gas),
         int(max_priority_fee),
@@ -968,7 +991,7 @@ def swap_tokens_to_another(tokenIn, tokenOut, amountIn, account, json_abi):
             profit_usd,
         ) = swap_cost_to_weth(estimate_g, maxAmountOut)
         print(
-            f"check convert {amountIn} of {tokenIn} to weth. cost USD: {cost_usd} profit USD: {profit_usd}"
+            f"Check convert {amountIn} of {tokenIn} to WETH. Cost USD: {cost_usd} Profit USD: {profit_usd}"
         )
         if profit_usd > cost_usd and cost_usd > 0:
             try:
@@ -1039,6 +1062,7 @@ def check_convertions(json_abi):
     weth_contract = web3.eth.contract(
         address=web3.toChecksumAddress(config["token_weth"].lower()), abi=json_abi
     )
+
     weth_amount_wei = weth_contract.functions.balanceOf(account.address).call()
     ether_amount_wei = web3.eth.getBalance(account.address)
     if weth_amount_wei < minimum_weth_target_wei:
@@ -1066,28 +1090,34 @@ def check_balance(json_abi):
     global TOKENS_PRICES_LIST
     account = get_account()
 
-    if len(TOKENS_IN_WALLET_LIST) == 0:
-        t_in_w = tokens_in_wallet(config["token_weth"], 0)
-        TOKENS_IN_WALLET_LIST.append(t_in_w)
+    try:
+        if len(TOKENS_IN_WALLET_LIST) == 0:
+            t_in_w = tokens_in_wallet(config["token_weth"], 0)
+            TOKENS_IN_WALLET_LIST.append(t_in_w)
 
-    check_convertions(json_abi)
-    TOKENS_IN_WALLET_LIST = get_tokens_in_wallet(json_abi, account)
-    if len(TOKENS_PRICES_LIST) > 0:
-        ether_amount = web3.fromWei(web3.eth.getBalance(account.address), "ether")
-        if ether_amount > 0:
-            ether_amount_usd = round(
-                ether_amount * Decimal(get_token_price(config["token_weth"])), 2
-            )
-            print(f"Ether amount: {ether_amount} Ether USD: {ether_amount_usd}")
+        check_convertions(json_abi)
+        TOKENS_IN_WALLET_LIST = get_tokens_in_wallet(json_abi, account)
+        if len(TOKENS_PRICES_LIST) > 0:
+            ether_amount = web3.fromWei(web3.eth.getBalance(account.address), "ether")
+            if ether_amount > 0:
+                ether_amount_usd = round(
+                    ether_amount * Decimal(get_token_price(config["token_weth"])), 2
+                )
+                print(f"Ether amount: {ether_amount} Ether USD: {ether_amount_usd}")
 
-        print("Tokens in wallet:")
-        count = 0
-        weth_current_amount = 0
-        for tk in TOKENS_IN_WALLET_LIST:
-            if tk.amount > 0:
-                count += 1
-                value = round(get_token_amount_price(tk.token, tk.amount), 2)
-                print(f"{count} - Token: {tk.token} Amount: {tk.amount} USD: {value}")
+            print("Tokens in wallet:")
+            count = 0
+            weth_current_amount = 0
+            for tk in TOKENS_IN_WALLET_LIST:
+                if tk.amount > 0:
+                    count += 1
+                    value = round(get_token_amount_price(tk.token, tk.amount), 2)
+                    print(
+                        f"{count} - Token: {tk.token} Amount: {tk.amount} USD: {value}"
+                    )
+    except:
+        error = traceback.format_exc()
+        print(f"check_balance error: {error}")
 
 
 def start_swap(
@@ -1247,9 +1277,22 @@ def no_multithreads_sending_swaps():
             print("Error: ", error)
 
 
+def test():
+    global SUGGEST_BASE_FEE
+    fill_metrics_info()
+    print("SUGGEST_BASE_FEE: ", SUGGEST_BASE_FEE)
+
+
 def main3():
-    dec = round(0, 2)
-    print(dec)
+    json_abi = get_etherscan_weth_abi()
+    account = get_account()
+    weth_contract = web3.eth.contract(
+        address=web3.toChecksumAddress(config["token_weth"].lower()), abi=json_abi
+    )
+    weth_amount_wei = weth_contract.functions.balanceOf(account.address).call(
+        {"quantity": "earliest"}
+    )
+    print("weth_amount_wei: ", weth_amount_wei)
 
 
 def main2():
@@ -1375,8 +1418,10 @@ def main():
     global WETH_ABI
     WETH_ABI = get_etherscan_weth_abi()
     check_balance(WETH_ABI)
-    deploy_watcher()
-    deploy_flash_swap()
+    account = get_account()
+    (max_base_fee_per_gas, max_priority_fee, gas_limit) = get_deploy_cost()
+    deploy_watcher(account, gas_limit, max_base_fee_per_gas, max_priority_fee)
+    deploy_flash_swap(account, gas_limit, max_base_fee_per_gas, max_priority_fee)
     with concurrent.futures.ThreadPoolExecutor() as executor:
         metrics = executor.submit(fill_metrics_info)
         dx_list = executor.submit(fill_dex_info)

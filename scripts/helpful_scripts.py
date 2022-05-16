@@ -232,13 +232,39 @@ def get_gas():
     return gas
 
 
+def get_deploy_cost():
+    gas_oracle = get_gas()
+    max_priority_fee = Decimal(gas_oracle.safeGasPrice) - Decimal(
+        gas_oracle.suggestBaseFee
+    )
+    base_fee_per_gas = Decimal(gas_oracle.safeGasPrice)
+
+    max_base_fee_per_gas = base_fee_per_gas + max_priority_fee
+    gas_limit = int(config["gas_limit_start_deploy_contracts"])
+
+    return (
+        int(max_base_fee_per_gas),
+        int(max_priority_fee),
+        gas_limit,
+    )
+
+
 def get_weth(ether_wei):
     """
     Mints WETH by depositing ETH.
     """
     account = get_account()
+    (maxFeePerGas, maxPriorityFeePerGas, gasLimit) = get_deploy_cost()
     weth = interface.IWeth(config["token_weth"])
-    tx = weth.deposit({"from": account, "value": ether_wei})
+    tx = weth.deposit(
+        {
+            "from": account,
+            "value": ether_wei,
+            "gasLimit": gasLimit,
+            "maxFeePerGas": maxFeePerGas,
+            "maxPriorityFeePerGas": maxPriorityFeePerGas,
+        }
+    )
     tx.wait(1)
     print("WETH Received.")
 

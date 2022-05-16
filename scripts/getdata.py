@@ -40,12 +40,20 @@ def get_ethgasoracle():
     url = config["gasoracle_url"]
     response = requests.get(url, timeout=10)
     j = json.loads(response.content.decode("utf-8"))
-    gas = ethgasoracle(
-        int(j["result"]["FastGasPrice"]),
-        int(j["result"]["ProposeGasPrice"]),
-        int(j["result"]["SafeGasPrice"]),
-        Decimal(j["result"]["suggestBaseFee"]),
-    )
+    if response.status_code == 200:
+        gas = ethgasoracle(
+            int(j["result"]["FastGasPrice"]),
+            int(j["result"]["ProposeGasPrice"]),
+            int(j["result"]["SafeGasPrice"]),
+            Decimal(j["result"]["suggestBaseFee"]),
+        )
+    else:
+        gas = ethgasoracle(
+            int(-1),
+            int(-1),
+            int(-1),
+            Decimal(-1.0),
+        )
 
     return gas
 
