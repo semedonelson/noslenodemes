@@ -52,6 +52,8 @@ WETH_ABI = ""
 TOKENS_IN_WALLET_LIST = []
 COINGECKO_TOKEN_LIST = []
 TOKENS_PRICES_LIST = []
+DEFAULT_TOKENS_LIST = []
+DEFAULT_TOKENS_PRICES_LIST = []
 # Queues
 queue_dex_info = Queue()
 queue_most_traded_pairs = Queue()
@@ -119,35 +121,83 @@ def process_dex_pairs_list_tokens(final_dex_pairs_list):
                 decimal0 = pair.token0["decimals"]
                 decimal1 = pair.token1["decimals"]
 
-                if token0 not in tokens_not_found:
-                    if token0 not in tokens_added:
-                        coingecko_id0 = get_coingecko_id_by_symbol(symbol0, token0)
-                        if len(coingecko_id0) == 1:
+                if token0 in TOKENS_PRICES_LIST:
+                    if len(DEFAULT_TOKENS_PRICES_LIST) < len(TOKENS_PRICES_LIST):
+                        if (
+                            next(
+                                (
+                                    x.token
+                                    for x in DEFAULT_TOKENS_PRICES_LIST
+                                    if x.token == token0
+                                ),
+                                None,
+                            )
+                            == None
+                        ):
+                            coingecko_id0 = get_coingecko_id_by_symbol(symbol0, token0)
+                            if len(coingecko_id0) == 1:
+                                token0_found = True
+                                t_c_p = tokens_coingecko_price(
+                                    token0, coingecko_id0[0], symbol0, decimal0, 0, 0
+                                )
+                                DEFAULT_TOKENS_PRICES_LIST.append(t_c_p)
+                                tokens_added.append(token0)
+                    else:
+                        continue
+                else:
+                    if token0 not in tokens_not_found:
+                        if token0 not in tokens_added:
+                            coingecko_id0 = get_coingecko_id_by_symbol(symbol0, token0)
+                            if len(coingecko_id0) == 1:
+                                token0_found = True
+                                t_c_p = tokens_coingecko_price(
+                                    token0, coingecko_id0[0], symbol0, decimal0, 0, 0
+                                )
+                                tokens_list.append(t_c_p)
+                                tokens_added.append(token0)
+                            else:
+                                tokens_not_found.append(token0)
+                        else:
                             token0_found = True
-                            t_c_p = tokens_coingecko_price(
-                                token0, coingecko_id0[0], symbol0, decimal0, 0, 0
-                            )
-                            tokens_list.append(t_c_p)
-                            tokens_added.append(token0)
-                        else:
-                            tokens_not_found.append(token0)
-                    else:
-                        token0_found = True
 
-                if token1 not in tokens_not_found:
-                    if token1 not in tokens_added:
-                        coingecko_id1 = get_coingecko_id_by_symbol(symbol1, token1)
-                        if len(coingecko_id1) == 1:
-                            token1_found = True
-                            t_c_p = tokens_coingecko_price(
-                                token1, coingecko_id1[0], symbol1, decimal1, 0, 0
+                if token1 in TOKENS_PRICES_LIST:
+                    if len(DEFAULT_TOKENS_PRICES_LIST) < len(TOKENS_PRICES_LIST):
+                        if (
+                            next(
+                                (
+                                    x.token
+                                    for x in DEFAULT_TOKENS_PRICES_LIST
+                                    if x.token == token1
+                                ),
+                                None,
                             )
-                            tokens_list.append(t_c_p)
-                            tokens_added.append(token1)
-                        else:
-                            tokens_not_found.append(token1)
+                            == None
+                        ):
+                            coingecko_id1 = get_coingecko_id_by_symbol(symbol1, token1)
+                            if len(coingecko_id1) == 1:
+                                token1_found = True
+                                t_c_p = tokens_coingecko_price(
+                                    token1, coingecko_id1[0], symbol1, decimal1, 0, 0
+                                )
+                                DEFAULT_TOKENS_PRICES_LIST.append(t_c_p)
+                                tokens_added.append(token1)
                     else:
-                        token1_found = True
+                        continue
+                else:
+                    if token1 not in tokens_not_found:
+                        if token1 not in tokens_added:
+                            coingecko_id1 = get_coingecko_id_by_symbol(symbol1, token1)
+                            if len(coingecko_id1) == 1:
+                                token1_found = True
+                                t_c_p = tokens_coingecko_price(
+                                    token1, coingecko_id1[0], symbol1, decimal1, 0, 0
+                                )
+                                tokens_list.append(t_c_p)
+                                tokens_added.append(token1)
+                            else:
+                                tokens_not_found.append(token1)
+                        else:
+                            token1_found = True
 
                 if token0_found == False and token1_found == False:
                     pairs_to_remove.append(pair.pair_id)
@@ -739,6 +789,8 @@ def check_profitability(dex_pair_final_list):
 
 def update_tokens_price():
     global TOKENS_PRICES_LIST
+    global DEFAULT_TOKENS_PRICES_LIST
+    next_default_tokens_update_unix = 0
     while True:
         if len(TOKENS_PRICES_LIST) > 0:
             for c_t in TOKENS_PRICES_LIST:
@@ -747,7 +799,32 @@ def update_tokens_price():
                     if price > 0:
                         date_time_current = datetime.now()
                         c_t.usdPrice = price
-                        c_t.lastUpdateTime = date_time_current
+                        c_t.lastUpdateTime = int(
+                            time.mktime(date_time_current.timetuple())
+                        )
+                    date_time_current = datetime.now()
+                    if (
+                        int(time.mktime(date_time_current.timetuple()))
+                        > next_default_tokens_update_unix
+                    ):
+                        for c_t in DEFAULT_TOKENS_PRICES_LIST:
+                            try:
+                                price = get_prices(c_t.coingecko_id)
+                                if price > 0:
+                                    date_time_current = datetime.now()
+                                    c_t.usdPrice = price
+                                    c_t.lastUpdateTime = int(
+                                        time.mktime(date_time_current.timetuple())
+                                    )
+                            except:
+                                continue
+                        date_time_current = datetime.now()
+                        next_default_tokens_update = date_time_current + timedelta(
+                            minutes=int(config["default_tokens_update_minute"])
+                        )
+                        next_default_tokens_update_unix = int(
+                            time.mktime(next_default_tokens_update.timetuple())
+                        )
                 except:
                     pass
         time.sleep(int(config["coingecko_prices_refresh_seconds"]))
@@ -855,8 +932,6 @@ def execution_cost(profit):
         eth_price,
         " max_base_fee_per_gas_ether: ",
         max_base_fee_per_gas_ether,
-        " gas_limit: ",
-        gas_limit,
     )
     return (
         int(max_base_fee_per_gas),
@@ -891,22 +966,50 @@ def get_token_price(token):
     global TOKENS_PRICES_LIST
     price = 0.00
     try:
-        if len(TOKENS_PRICES_LIST) > 0:
-            token = token.lower()
-            price, lastTime = next(
-                (x.usdPrice, x.lastUpdateTime)
-                for x in TOKENS_PRICES_LIST
-                if x.token == token
-            )
-            date_time_current = datetime.now()
-            if (
-                lastTime
-                + timedelta(
-                    minutes=max(int(config["valid_price_time_windows_minutes"]), 1)
+        price = 0
+        lastTime = 0
+
+        if token in DEFAULT_TOKENS_LIST:
+            if len(DEFAULT_TOKENS_PRICES_LIST) > 0:
+                token = token.lower()
+                price, lastTime = next(
+                    (
+                        (x.usdPrice, x.lastUpdateTime)
+                        for x in DEFAULT_TOKENS_PRICES_LIST
+                        if x.token == token
+                    ),
+                    (0, 0),
                 )
-                < date_time_current
-            ):
-                price = 0.00
+
+                date_time_current = datetime.now()
+                unix_date_time_current = int(time.mktime(date_time_current.timetuple()))
+                if (
+                    lastTime
+                    + timedelta(
+                        minutes=max(int(config["valid_price_time_windows_minutes"]), 1)
+                    )
+                    < unix_date_time_current
+                ):
+                    price = 0.00
+        else:
+            if len(TOKENS_PRICES_LIST) > 0:
+                token = token.lower()
+                price, lastTime = next(
+                    (x.usdPrice, x.lastUpdateTime)
+                    for x in TOKENS_PRICES_LIST
+                    if x.token == token
+                )
+
+                date_time_current = datetime.now()
+                unix_date_time_current = int(time.mktime(date_time_current.timetuple()))
+                if (
+                    lastTime
+                    + timedelta(
+                        minutes=max(int(config["valid_price_time_windows_minutes"]), 1)
+                    )
+                    < unix_date_time_current
+                ):
+                    price = 0.00
 
     except:
         pass
@@ -1277,22 +1380,47 @@ def no_multithreads_sending_swaps():
             print("Error: ", error)
 
 
+def fill_default_tokens():
+    global DEFAULT_TOKENS_LIST
+    DEFAULT_TOKENS_LIST = config["default_tokens"].split(";")
+
+
 def test():
-    global SUGGEST_BASE_FEE
-    fill_metrics_info()
-    print("SUGGEST_BASE_FEE: ", SUGGEST_BASE_FEE)
+    global TOKENS_PRICES_LIST
+    global DEFAULT_TOKENS_PRICES_LIST
+    myList = []
+    myList_d = []
+    t_p_weth = tokens_coingecko_price(
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", "weth", "weth", 18, 0, 0
+    )
+    t_p_usdt = tokens_coingecko_price(
+        "0xdac17f958d2ee523a2206206994597c13d831ec7", "usd-coin", "usdc", 18, 0, 0
+    )
+    t_p_usdc = tokens_coingecko_price(
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "tether", "usdt", 18, 0, 0
+    )
+
+    t_p_degem = tokens_coingecko_price(
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb20", "degem", "degem", 18, 0, 0
+    )
+    t_p_defit = tokens_coingecko_price(
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb10", "defit", "defit", 18, 0, 0
+    )
+
+    fill_default_tokens()
+    myList_d.append(t_p_usdt)
+    myList_d.append(t_p_usdc)
+    myList_d.append(t_p_weth)
+    myList.append(t_p_degem)
+    myList.append(t_p_defit)
+
+    TOKENS_PRICES_LIST = myList
+    DEFAULT_TOKENS_PRICES_LIST = myList_d
+    update_tokens_price()
 
 
-def main3():
-    json_abi = get_etherscan_weth_abi()
-    account = get_account()
-    weth_contract = web3.eth.contract(
-        address=web3.toChecksumAddress(config["token_weth"].lower()), abi=json_abi
-    )
-    weth_amount_wei = weth_contract.functions.balanceOf(account.address).call(
-        {"quantity": "earliest"}
-    )
-    print("weth_amount_wei: ", weth_amount_wei)
+def main():
+    test()
 
 
 def main2():
@@ -1414,7 +1542,7 @@ def main1():
     check_profitability(list_final)
 
 
-def main():
+def main0():
     global WETH_ABI
     WETH_ABI = get_etherscan_weth_abi()
     check_balance(WETH_ABI)
@@ -1422,11 +1550,13 @@ def main():
     (max_base_fee_per_gas, max_priority_fee, gas_limit) = get_deploy_cost()
     deploy_watcher(account, gas_limit, max_base_fee_per_gas, max_priority_fee)
     deploy_flash_swap(account, gas_limit, max_base_fee_per_gas, max_priority_fee)
+    fill_default_tokens()
     with concurrent.futures.ThreadPoolExecutor() as executor:
         metrics = executor.submit(fill_metrics_info)
         dx_list = executor.submit(fill_dex_info)
         dx_proc = executor.submit(dex_info_processor)
         prices = executor.submit(update_tokens_price)
+        # ter um metodo para atualizar o default tokens list
         lst_most_traded = executor.submit(execute_most_traded_pairs)
         lst_less_traded = executor.submit(execute_less_traded_pairs)
         print(

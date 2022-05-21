@@ -29,10 +29,12 @@ def get_prices_data(coingecko_id, retry):
     if response.status_code == 200:
         j = json.loads(response.content.decode("utf-8"))
     elif response.status_code == 429:
+        # renew IP. Faz 1 retry
         if retry > 0:
             retry = retry - 1
             time.sleep(retry_total - retry)
             get_prices_data(coingecko_id, retry)
+
     return j
 
 

@@ -11,13 +11,13 @@ percentage_amount_to_use: 80
 top_percentage_amount_to_request: 95
 max_retry_in_price_retrieve_error: 10
 valid_price_time_windows_minutes: 10
+default_tokens_update_minute: 1
 coingecko_prices_url: "https://api.coingecko.com/api/v3/simple/price?ids=@coingecko_id&vs_currencies=usd"
 gasoracle_url: "https://api.etherscan.io/api?module=gastracker&action=gasoracle&apikey=76EIAGPFFB8GNK9Z8IGEAN85DMZER3DMN4"
 etherscan_weth_abi: "https://api.etherscan.io/api?module=contract&action=getabi&address=0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2&apikey=76EIAGPFFB8GNK9Z8IGEAN85DMZER3DMN4"
 token_weth: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
-token_tether: "0xdac17f958d2ee523a2206206994597c13d831ec7"
-token_usdc: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 tokens_to_exclude: "0x82b0e50478eeafde392d45d1259ed1071b6fda81;0x81a0baec267f9fb2b4ba9ab743ee586e2371916f;0x02f2d4a04e6e01ace88bd2cd632875543b2ef577;0x1fcdce58959f536621d76f5b7ffb955baa5a672f;0xa44e5137293e855b1b7bc7e2c6f8cd796ffcb037;0x9cf77be84214beb066f26a4ea1c38ddcc2afbcf7"
+default_tokens: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2;0xdac17f958d2ee523a2206206994597c13d831ec7;0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 minimum_weth_target: 1000.00
 gas_type: "fast"
 base_fee_multiplier: 2.0
@@ -26,7 +26,7 @@ gas_limit_start_swap: 330000
 gas_limit_start_deploy_contracts: 30000000
 gas_limit_start_swap_tokens: 300000
 metrics_refresh_seconds: 60
-coingecko_prices_refresh_seconds: 60
+coingecko_prices_refresh_seconds: 1
 token_value_min_threshould: 1000.00
 min_depre_percentage_token_swap: 0.5
 remove_min_threshould_pairs: False
