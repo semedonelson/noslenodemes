@@ -9,7 +9,6 @@ liquidity_pairs_list_percentage: 25
 dex_info_process_cicle_minutes: 720
 percentage_amount_to_use: 80
 top_percentage_amount_to_request: 95
-max_retry_in_price_retrieve_error: 10
 valid_price_time_windows_minutes: 10
 default_tokens_update_minute: 1
 coingecko_prices_url: "https://api.coingecko.com/api/v3/simple/price?ids=@coingecko_id&vs_currencies=usd"

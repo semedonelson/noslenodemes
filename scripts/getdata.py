@@ -4,6 +4,25 @@ import json
 from scripts.classes import ethgasoracle
 from decimal import Decimal
 import time
+from stem import Signal
+from stem.control import Controller
+
+
+def get_tor_session():
+    session = requests.session()
+    # Tor uses the 9050 port as the default socks port
+    session.proxies = {
+        "http": "socks5://127.0.0.1:9050",
+        "https": "socks5://127.0.0.1:9050",
+    }
+    return session
+
+
+# signal TOR for a new connection
+def renew_connection():
+    with Controller.from_port(port=9051) as controller:
+        controller.authenticate(password="47Fwch1wFkqEk3PzV2HiGA==")
+        controller.signal(Signal.NEWNYM)
 
 
 def run_query_post(query, url):
@@ -20,20 +39,17 @@ def run_query_post(query, url):
         return "Query failed. return code is {}. {}".format(response.status_code, query)
 
 
-def get_prices_data(coingecko_id, retry):
+def get_prices_data(coingecko_id):
+    session = get_tor_session()
     url = config["coingecko_prices_url"]
     url = url.replace("@coingecko_id", coingecko_id)
-    response = requests.get(url, timeout=10)
-    retry_total = int(config["max_retry_in_price_retrieve_error"])
+    response = session.get(url).text
     j = {coingecko_id: {"usd": 0}}
-    if response.status_code == 200:
-        j = json.loads(response.content.decode("utf-8"))
-    elif response.status_code == 429:
-        # renew IP. Faz 1 retry
-        if retry > 0:
-            retry = retry - 1
-            time.sleep(retry_total - retry)
-            get_prices_data(coingecko_id, retry)
+    if "error" not in response:
+        j = json.loads(response)
+    else:
+        print("Error renew Tor IP address")
+        renew_connection()
 
     return j
 

@@ -217,9 +217,7 @@ def get_liquidity_pairs_list_percentage():
 
 def get_prices(coingecko_id):
     price = 0
-    response = get_prices_data(
-        coingecko_id, int(config["max_retry_in_price_retrieve_error"])
-    )
+    response = get_prices_data(coingecko_id)
     try:
         price = response[coingecko_id]["usd"]
     except:

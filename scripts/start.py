@@ -104,6 +104,7 @@ def deploy_flash_swap(account, gasLimit, maxFeePerGas, maxPriorityFeePerGas):
 
 def process_dex_pairs_list_tokens(final_dex_pairs_list):
     global TOKENS_PRICES_LIST
+    global DEFAULT_TOKENS_PRICES_LIST
     tokens_list = []
     pairs_to_remove = []
     tokens_added = []
@@ -121,8 +122,8 @@ def process_dex_pairs_list_tokens(final_dex_pairs_list):
                 decimal0 = pair.token0["decimals"]
                 decimal1 = pair.token1["decimals"]
 
-                if token0 in TOKENS_PRICES_LIST:
-                    if len(DEFAULT_TOKENS_PRICES_LIST) < len(TOKENS_PRICES_LIST):
+                if token0 in DEFAULT_TOKENS_LIST:
+                    if len(DEFAULT_TOKENS_PRICES_LIST) < len(DEFAULT_TOKENS_LIST):
                         if (
                             next(
                                 (
@@ -160,8 +161,8 @@ def process_dex_pairs_list_tokens(final_dex_pairs_list):
                         else:
                             token0_found = True
 
-                if token1 in TOKENS_PRICES_LIST:
-                    if len(DEFAULT_TOKENS_PRICES_LIST) < len(TOKENS_PRICES_LIST):
+                if token1 in DEFAULT_TOKENS_LIST:
+                    if len(DEFAULT_TOKENS_PRICES_LIST) < len(DEFAULT_TOKENS_LIST):
                         if (
                             next(
                                 (
@@ -925,14 +926,7 @@ def execution_cost(profit):
     eth_price = Decimal(get_token_price(config["token_weth"].lower()))
     gas_limit = int(config["gas_limit_start_swap"])
     cost = (eth_price * max_base_fee_per_gas_ether) * gas_limit
-    print(
-        "cost: ",
-        cost,
-        " eth_price: ",
-        eth_price,
-        " max_base_fee_per_gas_ether: ",
-        max_base_fee_per_gas_ether,
-    )
+
     return (
         int(max_base_fee_per_gas),
         int(max_priority_fee),
@@ -1419,7 +1413,7 @@ def test():
     update_tokens_price()
 
 
-def main():
+def main3():
     test()
 
 
@@ -1542,7 +1536,7 @@ def main1():
     check_profitability(list_final)
 
 
-def main0():
+def main():
     global WETH_ABI
     WETH_ABI = get_etherscan_weth_abi()
     check_balance(WETH_ABI)
