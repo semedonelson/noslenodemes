@@ -45,11 +45,12 @@ def get_prices_data(coingecko_id):
     url = url.replace("@coingecko_id", coingecko_id)
     response = session.get(url).text
     j = {coingecko_id: {"usd": 0}}
-    if "error" not in response:
+    if coingecko_id in response:
         j = json.loads(response)
     else:
-        print("Error renew Tor IP address")
-        renew_connection()
+        if "Cloudflare" in response:
+            print("Cloudflare rrror. Renew Tor IP address. Response: ", response)
+            renew_connection()
 
     return j
 

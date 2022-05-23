@@ -49,6 +49,7 @@ GAS = 0.0
 SUGGEST_BASE_FEE = 0.0
 WETH_BALANCE = 0
 WETH_ABI = ""
+ACCOUNT = None
 TOKENS_IN_WALLET_LIST = []
 COINGECKO_TOKEN_LIST = []
 TOKENS_PRICES_LIST = []
@@ -68,7 +69,9 @@ def coingecko_list_tokens():
     print("Total of coingecko tokens: ", len(COINGECKO_TOKEN_LIST))
 
 
-def deploy_watcher(account, gasLimit, maxFeePerGas, maxPriorityFeePerGas):
+def deploy_watcher(gasLimit, maxFeePerGas, maxPriorityFeePerGas):
+    global ACCOUNT
+    account = ACCOUNT
     if len(ChainWatcher) == 0:
         watcher = ChainWatcher.deploy(
             {
@@ -85,7 +88,9 @@ def deploy_watcher(account, gasLimit, maxFeePerGas, maxPriorityFeePerGas):
     return watcher, account
 
 
-def deploy_flash_swap(account, gasLimit, maxFeePerGas, maxPriorityFeePerGas):
+def deploy_flash_swap(gasLimit, maxFeePerGas, maxPriorityFeePerGas):
+    global ACCOUNT
+    account = ACCOUNT
     if len(FlashSwap) == 0:
         flash = FlashSwap.deploy(
             {
@@ -606,7 +611,8 @@ def execute_less_traded_pairs():
 
 
 def check_profitability(dex_pair_final_list):
-    account = get_account()
+    global ACCOUNT
+    account = ACCOUNT
     watcher = ChainWatcher[-1]
     for _dex_pair_final in dex_pair_final_list:
         amounts = []
@@ -834,8 +840,9 @@ def update_tokens_price():
 def fill_metrics_info():
     global GAS
     global SUGGEST_BASE_FEE
+    global ACCOUNT
     WETH_ABI = get_etherscan_weth_abi()
-    account = get_account()
+    account = ACCOUNT
     while True:
         try:
             # Gas
@@ -852,7 +859,7 @@ def fill_metrics_info():
 
                 SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
 
-            check_balance(WETH_ABI)
+            check_balance()
             # sleep
             time.sleep(int(config["metrics_refresh_seconds"]))
         except:
@@ -868,8 +875,9 @@ def swap_tokens_estimate_gas(
     _amountOutMin,
     _router,
 ):
+    global ACCOUNT
     flas_swap = FlashSwap[-1]
-    account = get_account()
+    account = ACCOUNT
 
     web3_flas_swap = web3.eth.contract(address=flas_swap.address, abi=flas_swap.abi)
     estimated_gas = web3_flas_swap.functions.swap_tokens(
@@ -897,6 +905,10 @@ def get_amount_usd_value(token, amount):
 def execution_cost(profit):
     global GAS
     global SUGGEST_BASE_FEE
+    global WETH_ABI
+    global ACCOUNT
+    account = ACCOUNT
+    json_abi = WETH_ABI
     max_priority_fee = Decimal(GAS) - Decimal(SUGGEST_BASE_FEE)
     base_fee_per_gas = Decimal(GAS) * Decimal(config["base_fee_multiplier"])
 
@@ -927,15 +939,33 @@ def execution_cost(profit):
     gas_limit = int(config["gas_limit_start_swap"])
     cost = (eth_price * max_base_fee_per_gas_ether) * gas_limit
 
+    # transfer to WETH cost
+    minimum_weth_target_wei = web3.toWei(
+        Decimal(config["minimum_weth_target"]), "ether"
+    )
+    weth_contract = web3.eth.contract(
+        address=web3.toChecksumAddress(config["token_weth"].lower()), abi=json_abi
+    )
+    weth_amount_wei = weth_contract.functions.balanceOf(account.address).call()
+    convert_cost_usd = 0
+    if weth_amount_wei < minimum_weth_target_wei:
+        estimate_g = int(config["gas_limit_start_swap_tokens"])
+        (
+            _,
+            _,
+            convert_cost_usd,
+            _,
+        ) = swap_cost_to_another_token(estimate_g, profit)
+
     return (
         int(max_base_fee_per_gas),
         int(max_priority_fee),
-        round(cost, 2),
+        round(cost + convert_cost_usd, 2),
         gas_limit,
     )
 
 
-def swap_cost_to_weth(gas_limit, amount_profit):
+def swap_cost_to_another_token(gas_limit, amount_profit):
     global GAS
     global SUGGEST_BASE_FEE
     max_priority_fee = Decimal(GAS) - Decimal(SUGGEST_BASE_FEE)
@@ -1012,14 +1042,22 @@ def get_token_price(token):
 
 def get_token_amount_price(token, amount):
     global TOKENS_PRICES_LIST
+    global DEFAULT_TOKENS_PRICES_LIST
+    global DEFAULT_TOKENS_LIST
+    tokens_list = []
     price = 0.00
     value = 0.00
     try:
-        if len(TOKENS_PRICES_LIST) > 0:
+        if token in DEFAULT_TOKENS_LIST:
+            tokens_list = DEFAULT_TOKENS_PRICES_LIST
+        else:
+            tokens_list = TOKENS_PRICES_LIST
+
+        if len(tokens_list) > 0:
             token = token.lower()
             price, lastTime, decimal = next(
                 (x.usdPrice, x.lastUpdateTime, x.decimal)
-                for x in TOKENS_PRICES_LIST
+                for x in tokens_list
                 if x.token == token
             )
             date_time_current = datetime.now()
@@ -1056,9 +1094,13 @@ def tst_fill_prices_info():
     SUGGEST_BASE_FEE = gas_oracle.suggestBaseFee
 
 
-def swap_tokens_to_another(tokenIn, tokenOut, amountIn, account, json_abi):
+def swap_tokens_to_another(tokenIn, tokenOut, amountIn):
     global TOKENS_IN_WALLET_LIST
     global DEX_INFO_LIST
+    global WETH_ABI
+    global ACCOUNT
+    json_abi = WETH_ABI
+    account = ACCOUNT
     watcher = ChainWatcher[-1]
     flash = FlashSwap[-1]
     maxAmountOut = 0
@@ -1086,7 +1128,7 @@ def swap_tokens_to_another(tokenIn, tokenOut, amountIn, account, json_abi):
             _,
             cost_usd,
             profit_usd,
-        ) = swap_cost_to_weth(estimate_g, maxAmountOut)
+        ) = swap_cost_to_another_token(estimate_g, maxAmountOut)
         print(
             f"Check convert {amountIn} of {tokenIn} to WETH. Cost USD: {cost_usd} Profit USD: {profit_usd}"
         )
@@ -1120,7 +1162,7 @@ def swap_tokens_to_another(tokenIn, tokenOut, amountIn, account, json_abi):
                     max_priority_fee,
                     cost_real_usd,
                     profit_usd,
-                ) = swap_cost_to_weth(estimate_gas, maxAmountOut)
+                ) = swap_cost_to_another_token(estimate_gas, maxAmountOut)
                 print(f"cost_real_usd: {cost_real_usd} profit_usd: {profit_usd}")
                 if profit_usd > cost_real_usd and cost_real_usd > 0:
                     print(
@@ -1148,10 +1190,13 @@ def swap_tokens_to_another(tokenIn, tokenOut, amountIn, account, json_abi):
                 print("Error: ", e)
 
 
-def check_convertions(json_abi):
-    account = get_account()
+def check_convertions():
+    global ACCOUNT
+    account = ACCOUNT
     global TOKENS_IN_WALLET_LIST
     global DEX_INFO_LIST
+    global WETH_ABI
+    json_abi = WETH_ABI
     minimum_weth_target_wei = web3.toWei(
         Decimal(config["minimum_weth_target"]), "ether"
     )
@@ -1169,31 +1214,30 @@ def check_convertions(json_abi):
             else:
                 get_weth(minimum_weth_target_wei - weth_amount_wei)
 
-    TOKENS_IN_WALLET_LIST = get_tokens_in_wallet(json_abi, account)
+    TOKENS_IN_WALLET_LIST = get_tokens_in_wallet()
     for t in TOKENS_IN_WALLET_LIST:
         if t.token.lower() != config["token_weth"].lower():
             swap_tokens_to_another(
-                t.token.lower(),
-                config["token_weth"].lower(),
-                t.amount,
-                account,
-                json_abi,
+                t.token.lower(), config["token_weth"].lower(), t.amount
             )
 
 
-def check_balance(json_abi):
+def check_balance():
     global WETH_BALANCE
     global TOKENS_IN_WALLET_LIST
     global TOKENS_PRICES_LIST
-    account = get_account()
+    global ACCOUNT
+    account = ACCOUNT
+    global WETH_ABI
+    json_abi = WETH_ABI
 
     try:
         if len(TOKENS_IN_WALLET_LIST) == 0:
             t_in_w = tokens_in_wallet(config["token_weth"], 0)
             TOKENS_IN_WALLET_LIST.append(t_in_w)
 
-        check_convertions(json_abi)
-        TOKENS_IN_WALLET_LIST = get_tokens_in_wallet(json_abi, account)
+        check_convertions()
+        TOKENS_IN_WALLET_LIST = get_tokens_in_wallet()
         if len(TOKENS_PRICES_LIST) > 0:
             ether_amount = web3.fromWei(web3.eth.getBalance(account.address), "ether")
             if ether_amount > 0:
@@ -1230,7 +1274,8 @@ def start_swap(
     maxPriorityFeePerGas,
 ):
     flash_swap = FlashSwap[-1]
-    account = get_account()
+    global ACCOUNT
+    account = ACCOUNT
     total_block_number = web3.eth.block_number + 2
     try:
         swap_trx = flash_swap.start(
@@ -1278,8 +1323,12 @@ def start_swap(
                     break
 
 
-def get_tokens_in_wallet(json_abi, account):
+def get_tokens_in_wallet():
     global TOKENS_IN_WALLET_LIST
+    global WETH_ABI
+    global ACCOUNT
+    json_abi = WETH_ABI
+    account = ACCOUNT
     if network.show_active() == "mainnet":
         pass  # go get from bsscan
     else:
@@ -1417,16 +1466,6 @@ def main3():
     test()
 
 
-def main2():
-    global WETH_ABI
-    deploy_flash_swap()
-    deploy_watcher()
-    WETH_ABI = get_etherscan_weth_abi()
-    tst_fill_prices_info()
-    check_balance(WETH_ABI)
-    # fill_prices_info()
-
-
 def main1():
     print("Starting main!")
     pair0 = "0x6b0b819494a3b789439f32fb0097a625b16b5225"
@@ -1536,21 +1575,25 @@ def main1():
     check_profitability(list_final)
 
 
-def main():
+def fill_global_variables():
     global WETH_ABI
+    global ACCOUNT
     WETH_ABI = get_etherscan_weth_abi()
-    check_balance(WETH_ABI)
-    account = get_account()
+    ACCOUNT = get_account()
+
+
+def main():
+    fill_global_variables()
+    check_balance()
     (max_base_fee_per_gas, max_priority_fee, gas_limit) = get_deploy_cost()
-    deploy_watcher(account, gas_limit, max_base_fee_per_gas, max_priority_fee)
-    deploy_flash_swap(account, gas_limit, max_base_fee_per_gas, max_priority_fee)
+    deploy_watcher(gas_limit, max_base_fee_per_gas, max_priority_fee)
+    deploy_flash_swap(gas_limit, max_base_fee_per_gas, max_priority_fee)
     fill_default_tokens()
     with concurrent.futures.ThreadPoolExecutor() as executor:
         metrics = executor.submit(fill_metrics_info)
         dx_list = executor.submit(fill_dex_info)
         dx_proc = executor.submit(dex_info_processor)
         prices = executor.submit(update_tokens_price)
-        # ter um metodo para atualizar o default tokens list
         lst_most_traded = executor.submit(execute_most_traded_pairs)
         lst_less_traded = executor.submit(execute_less_traded_pairs)
         print(
