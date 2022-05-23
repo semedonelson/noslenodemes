@@ -699,11 +699,16 @@ def check_profitability(dex_pair_final_list):
                         max_priority_fee,
                         exec_cost_usd,
                         gas_limit,
+                        meet_effort_criteria,
                     ) = execution_cost(gross_profit_usd)
                     net_profit_usd = round(
                         Decimal(gross_profit_usd) - Decimal(exec_cost_usd), 2
                     )
-                    if net_profit_usd > 0 and exec_cost_usd > 0:
+                    if (
+                        net_profit_usd > 0
+                        and exec_cost_usd > 0
+                        and meet_effort_criteria == True
+                    ):
                         print(
                             f"Profit found: pair: {_pairAddress} Token Out: {_dex_pair_final.tokens[1]} Amount: {_amountTokenPay} Gross USD: {gross_profit_usd} Net USD: {net_profit_usd}"
                         )
@@ -756,11 +761,16 @@ def check_profitability(dex_pair_final_list):
                         max_priority_fee,
                         exec_cost_usd,
                         gas_limit,
+                        meet_effort_criteria,
                     ) = execution_cost(gross_profit_usd)
                     net_profit_usd = round(
                         Decimal(gross_profit_usd) - Decimal(exec_cost_usd), 2
                     )
-                    if net_profit_usd > 0 and exec_cost_usd > 0:
+                    if (
+                        net_profit_usd > 0
+                        and exec_cost_usd > 0
+                        and meet_effort_criteria == True
+                    ):
                         print(
                             f"Profit found: pair: {_pairAddress} Token Out: {_dex_pair_final.tokens[1]} Amount: {_amountTokenPay} Gross USD: {gross_profit_usd} Net USD: {net_profit_usd}"
                         )
@@ -937,7 +947,7 @@ def execution_cost(profit):
     max_base_fee_per_gas_ether = web3.fromWei(max_base_fee_per_gas_wei, "ether")
     eth_price = Decimal(get_token_price(config["token_weth"].lower()))
     gas_limit = int(config["gas_limit_start_swap"])
-    cost = (eth_price * max_base_fee_per_gas_ether) * gas_limit
+    cost_usd = (eth_price * max_base_fee_per_gas_ether) * gas_limit
 
     # transfer to WETH cost
     minimum_weth_target_wei = web3.toWei(
@@ -956,12 +966,26 @@ def execution_cost(profit):
             convert_cost_usd,
             _,
         ) = swap_cost_to_another_token(estimate_g, profit)
+    total_cost_usd = Decimal(cost_usd) + Decimal(convert_cost_usd)
+    weth_amount_ether = web3.fromWei(weth_amount_wei, "ether")
+    weth_amount_usd = weth_amount_ether * eth_price
+    meet_effort_criteria = False
+
+    if Decimal(total_cost_usd) < (
+        (
+            Decimal(weth_amount_usd)
+            * max(Decimal(50.0), Decimal(config["entry_max_weth_value_percentage"]))
+        )
+        / 100
+    ):
+        meet_effort_criteria = True
 
     return (
         int(max_base_fee_per_gas),
         int(max_priority_fee),
-        round(cost + convert_cost_usd, 2),
+        round(total_cost_usd, 2),
         gas_limit,
+        meet_effort_criteria,
     )
 
 
@@ -1009,9 +1033,7 @@ def get_token_price(token):
                 unix_date_time_current = int(time.mktime(date_time_current.timetuple()))
                 if (
                     lastTime
-                    + timedelta(
-                        minutes=max(int(config["valid_price_time_windows_minutes"]), 1)
-                    )
+                    + max(int(config["valid_price_time_windows_minutes"]), 1) * 60
                     < unix_date_time_current
                 ):
                     price = 0.00
@@ -1028,9 +1050,7 @@ def get_token_price(token):
                 unix_date_time_current = int(time.mktime(date_time_current.timetuple()))
                 if (
                     lastTime
-                    + timedelta(
-                        minutes=max(int(config["valid_price_time_windows_minutes"]), 1)
-                    )
+                    + max(int(config["valid_price_time_windows_minutes"]), 1) * 60
                     < unix_date_time_current
                 ):
                     price = 0.00
@@ -1061,12 +1081,11 @@ def get_token_amount_price(token, amount):
                 if x.token == token
             )
             date_time_current = datetime.now()
+            unix_date_time_current = int(time.mktime(date_time_current.timetuple()))
+
             if (
-                lastTime
-                + timedelta(
-                    minutes=max(int(config["valid_price_time_windows_minutes"]), 1)
-                )
-                < date_time_current
+                lastTime + max(int(config["valid_price_time_windows_minutes"]), 1) * 60
+                < unix_date_time_current
             ):
                 value = 0.00
             else:
@@ -1433,24 +1452,51 @@ def test():
     global DEFAULT_TOKENS_PRICES_LIST
     myList = []
     myList_d = []
+    date_time_current = datetime.now()
     t_p_weth = tokens_coingecko_price(
-        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", "weth", "weth", 18, 0, 0
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "weth",
+        "weth",
+        18,
+        2004.09,
+        int(time.mktime(date_time_current.timetuple())),
     )
     t_p_usdt = tokens_coingecko_price(
-        "0xdac17f958d2ee523a2206206994597c13d831ec7", "usd-coin", "usdc", 18, 0, 0
+        "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "usd-coin",
+        "usdc",
+        18,
+        100,
+        int(time.mktime(date_time_current.timetuple())),
     )
     t_p_usdc = tokens_coingecko_price(
-        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "tether", "usdt", 18, 0, 0
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tether",
+        "usdt",
+        18,
+        100,
+        int(time.mktime(date_time_current.timetuple())),
     )
 
     t_p_degem = tokens_coingecko_price(
-        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb20", "degem", "degem", 18, 0, 0
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb20",
+        "degem",
+        "degem",
+        18,
+        100,
+        int(time.mktime(date_time_current.timetuple())),
     )
     t_p_defit = tokens_coingecko_price(
-        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb10", "defit", "defit", 18, 0, 0
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb10",
+        "defit",
+        "defit",
+        18,
+        100,
+        int(time.mktime(date_time_current.timetuple())),
     )
 
     fill_default_tokens()
+    fill_global_variables()
     myList_d.append(t_p_usdt)
     myList_d.append(t_p_usdc)
     myList_d.append(t_p_weth)
@@ -1459,7 +1505,8 @@ def test():
 
     TOKENS_PRICES_LIST = myList
     DEFAULT_TOKENS_PRICES_LIST = myList_d
-    update_tokens_price()
+    check_balance()
+    print("price: ", get_token_price("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"))
 
 
 def main3():
@@ -1585,9 +1632,10 @@ def fill_global_variables():
 def main():
     fill_global_variables()
     check_balance()
-    (max_base_fee_per_gas, max_priority_fee, gas_limit) = get_deploy_cost()
-    deploy_watcher(gas_limit, max_base_fee_per_gas, max_priority_fee)
-    deploy_flash_swap(gas_limit, max_base_fee_per_gas, max_priority_fee)
+    if len(ChainWatcher) == 0 or len(FlashSwap) == 0:
+        (max_base_fee_per_gas, max_priority_fee, gas_limit) = get_deploy_cost()
+        deploy_watcher(gas_limit, max_base_fee_per_gas, max_priority_fee)
+        deploy_flash_swap(gas_limit, max_base_fee_per_gas, max_priority_fee)
     fill_default_tokens()
     with concurrent.futures.ThreadPoolExecutor() as executor:
         metrics = executor.submit(fill_metrics_info)

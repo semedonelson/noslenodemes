@@ -17,7 +17,7 @@ etherscan_weth_abi: "https://api.etherscan.io/api?module=contract&action=getabi&
 token_weth: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
 tokens_to_exclude: "0x82b0e50478eeafde392d45d1259ed1071b6fda81;0x81a0baec267f9fb2b4ba9ab743ee586e2371916f;0x02f2d4a04e6e01ace88bd2cd632875543b2ef577;0x1fcdce58959f536621d76f5b7ffb955baa5a672f;0xa44e5137293e855b1b7bc7e2c6f8cd796ffcb037;0x9cf77be84214beb066f26a4ea1c38ddcc2afbcf7"
 default_tokens: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2;0xdac17f958d2ee523a2206206994597c13d831ec7;0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-minimum_weth_target: 1001.00
+minimum_weth_target: 1000.00
 gas_type: "fast"
 base_fee_multiplier: 2.0
 token_swap_base_fee_multiplier: 1.0
@@ -39,6 +39,7 @@ profit_level3_priority_feed_multiplier: 3.00
 profit_level4_priority_feed_multiplier: 3.50
 profit_level_other_priority_feed_multiplier: 4.00
 use_multithreads_for_sending_swaps: False
+entry_max_weth_value_percentage: 20.0
 list_errors_to_remove_pairs: "TRANSFER_FAILED;UniswapV2: K;INSUFFICIENT_INPUT_AMOUNT"
 networks:
   default: mainnet-fork

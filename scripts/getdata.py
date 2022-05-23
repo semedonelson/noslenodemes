@@ -49,7 +49,7 @@ def get_prices_data(coingecko_id):
         j = json.loads(response)
     else:
         if "Cloudflare" in response:
-            print("Cloudflare rrror. Renew Tor IP address. Response: ", response)
+            print("Cloudflare error. Renew Tor IP address. Response: ", response)
             renew_connection()
 
     return j
