@@ -39,6 +39,7 @@ from decimal import Decimal
 import traceback
 from eth_abi import decode_single
 from solcx import compile_standard, install_solc
+import logging
 
 # Global variables
 MOST_TRADED_PAIRS_LIST = []
@@ -61,12 +62,30 @@ queue_most_traded_pairs = Queue()
 queue_less_traded_pairs = Queue()
 queue_dex_pair_final_list = Queue()
 
+# Create Logger
+logger = logging.getLogger("start")
+logger.setLevel(logging.DEBUG)
+# Create console handler and set level to debug
+fh = logging.FileHandler("flashswap.log")
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+fh.setLevel(logging.INFO)
+# create formatter
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+# add formatter to ch
+ch.setFormatter(formatter)
+fh.setFormatter(formatter)
+# add ch to logger
+logger.addHandler(ch)
+logger.addHandler(fh)
+
 
 def coingecko_list_tokens():
     global COINGECKO_TOKEN_LIST
-    print("Get coingecko tokens list ...")
+    logger.info("Get coingecko tokens list ...")
     COINGECKO_TOKEN_LIST = get_coingecko_token()
-    print("Total of coingecko tokens: ", len(COINGECKO_TOKEN_LIST))
+    total = len(COINGECKO_TOKEN_LIST)
+    logger.info(f"Total of coingecko tokens: {total}")
 
 
 def deploy_watcher(gasLimit, maxFeePerGas, maxPriorityFeePerGas):
@@ -81,10 +100,12 @@ def deploy_watcher(gasLimit, maxFeePerGas, maxPriorityFeePerGas):
                 "maxPriorityFeePerGas": maxPriorityFeePerGas,
             },
         )
-        print("Deployed Chain Watcher Contract!")
+        logger.info("Deployed Chain Watcher Contract!")
     else:
         watcher = ChainWatcher[-1]
-        print(f"Chain Watcher Contract already Deployed. Address: {watcher.address}")
+        logger.info(
+            f"Chain Watcher Contract already Deployed. Address: {watcher.address}"
+        )
     return watcher, account
 
 
@@ -100,10 +121,10 @@ def deploy_flash_swap(gasLimit, maxFeePerGas, maxPriorityFeePerGas):
                 "maxPriorityFeePerGas": maxPriorityFeePerGas,
             },
         )
-        print("Deployed Flash Swap Contract!")
+        logger.info("Deployed Flash Swap Contract!")
     else:
         flash = FlashSwap[-1]
-        print(f"Flash Swap Contract already Deployed. Address: {flash.address}")
+        logger.info(f"Flash Swap Contract already Deployed. Address: {flash.address}")
     return flash, account
 
 
@@ -114,7 +135,7 @@ def process_dex_pairs_list_tokens(final_dex_pairs_list):
     pairs_to_remove = []
     tokens_added = []
     tokens_not_found = []
-    print("Starting setup tokens price list ...")
+    logger.info("Starting setup tokens price list ...")
     try:
         for pairs_list in final_dex_pairs_list:
             token0_found = False
@@ -220,7 +241,7 @@ def process_dex_pairs_list_tokens(final_dex_pairs_list):
                     break
         TOKENS_PRICES_LIST = tokens_list
     except Exception as e:
-        print("process_dex_pairs_list_tokens error: ", e)
+        logger.exception("process_dex_pairs_list_tokens error: ")
 
     return final_dex_pairs_list
 
@@ -313,18 +334,18 @@ def dex_info_processor():
         dex_info = queue_dex_info.get()
         for d in dex_info:
             size = len(d.pairs)
-            print("--------------------------------------------------")
-            print(
+            logger.info("--------------------------------------------------")
+            logger.info(
                 f"Dex Name: {d.name} \nFactory: {d.factory} \nRouter: {d.router} \nDefault Token: {d.default_token} \nPairs: {size} \nGraph: {d.use_graph}"
             )
-        print("--------------------------------------------------")
-        print("Processing pairs ....")
+        logger.info("--------------------------------------------------")
+        logger.info("Processing pairs ....")
         final_dex_pairs_list = get_dex_pairs_list(dex_info)
-        print("Setup the pairs list based on Coingecko Tokens price list")
+        logger.debug("Setup the pairs list based on Coingecko Tokens price list")
         final_dex_pairs_list = process_dex_pairs_list_tokens(final_dex_pairs_list)
         if bool(config["remove_min_threshould_pairs"]):
             lst_total = len(final_dex_pairs_list)
-            print(
+            logger.debug(
                 f"Start preparing to remove list from 'less then thresould' pairs. Total: {lst_total}"
             )
             try:
@@ -377,7 +398,7 @@ def dex_info_processor():
         LESS_TRADED_PAIRS_LIST = list_prepare(less_traded_dex_pairs_list, dex_info)
         queue_most_traded_pairs.put(MOST_TRADED_PAIRS_LIST)
         queue_less_traded_pairs.put(LESS_TRADED_PAIRS_LIST)
-        print("Finished processing pairs! ")
+        logger.info("Finished processing pairs! ")
         ## to be removed
         # break
 
@@ -515,13 +536,13 @@ def fill_dex_info():
                         time.mktime(date_time_current.timetuple())
                     )
                 except KeyboardInterrupt:
-                    print("shutdown initialized")
+                    logger.debug("shutdown initialized")
                     break
                 except:
                     pass
                     continue
         except KeyboardInterrupt:
-            print("shutdown initialized")
+            logger.debug("shutdown initialized")
             break
         except:
             pass
@@ -561,13 +582,11 @@ def execute_most_traded_pairs():
             total = round(end - start, 2)
             if len(list_most_traded_pairs) > 0:
                 end_time = datetime.now()
-                print(
+                logger.debug(
                     f"{end_time} - Most traded pairs Finished in {total} seconds cycle: {count}"
                 )
         except Exception as e:
-            # print("execute_most_traded_pairs error: ", e)
-            error = traceback.format_exc()
-            print("execute_most_traded_pairs error: ", error)
+            logger.exception("execute_most_traded_pairs error: ")
 
 
 def execute_less_traded_pairs():
@@ -603,11 +622,11 @@ def execute_less_traded_pairs():
             total = round(end - start, 2)
             if len(list_less_traded_pairs) > 0:
                 end_time = datetime.now()
-                print(
+                logger.debug(
                     f"{end_time} - Less traded pairs Finished in {total} seconds cycle: {count}"
                 )
         except Exception as e:
-            print("execute_less_traded_pairs error: ", e)
+            logger.exception("execute_less_traded_pairs error: ")
 
 
 def check_profitability(dex_pair_final_list):
@@ -709,7 +728,7 @@ def check_profitability(dex_pair_final_list):
                         and exec_cost_usd > 0
                         and meet_effort_criteria == True
                     ):
-                        print(
+                        logger.info(
                             f"Profit found: pair: {_pairAddress} Token Out: {_dex_pair_final.tokens[1]} Amount: {_amountTokenPay} Gross USD: {gross_profit_usd} Net USD: {net_profit_usd}"
                         )
                         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -771,7 +790,7 @@ def check_profitability(dex_pair_final_list):
                         and exec_cost_usd > 0
                         and meet_effort_criteria == True
                     ):
-                        print(
+                        logger.info(
                             f"Profit found: pair: {_pairAddress} Token Out: {_dex_pair_final.tokens[1]} Amount: {_amountTokenPay} Gross USD: {gross_profit_usd} Net USD: {net_profit_usd}"
                         )
                         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -788,19 +807,9 @@ def check_profitability(dex_pair_final_list):
                                 max_base_fee_per_gas,
                                 max_priority_fee,
                             )
-        except:
-            error = traceback.format_exc()
-            print(
-                "Oops!",
-                error,
-                "occurred. pair0: ",
-                _dex_pair_final.pairs_id[0],
-                " pair1: ",
-                _dex_pair_final.pairs_id[1],
-                " amount0: ",
-                amounts[0],
-                " amount1: ",
-                amounts[1],
+        except Exception as e:
+            logger.exception(
+                f"Error swaping pair0: {_dex_pair_final.pairs_id[0]} pair1: {_dex_pair_final.pairs_id[1]}"
             )
 
 
@@ -872,9 +881,8 @@ def fill_metrics_info():
             check_balance()
             # sleep
             time.sleep(int(config["metrics_refresh_seconds"]))
-        except:
-            error = traceback.format_exc()
-            print(f"fill_metrics_info error: {error}")
+        except Exception as e:
+            logger.exception(f"fill_metrics_info error: ")
             pass
 
 
@@ -897,7 +905,7 @@ def swap_tokens_estimate_gas(
         _amountOutMin,
         web3.toChecksumAddress(_router.lower()),
     ).estimateGas({"from": web3.toChecksumAddress(account.address.lower())})
-    print(f"Est. Gas:  {estimated_gas}")
+    logger.debug(f"Est. Gas:  {estimated_gas}")
 
 
 def get_amount_usd_value(token, amount):
@@ -1148,7 +1156,7 @@ def swap_tokens_to_another(tokenIn, tokenOut, amountIn):
             cost_usd,
             profit_usd,
         ) = swap_cost_to_another_token(estimate_g, maxAmountOut)
-        print(
+        logger.debug(
             f"Check convert {amountIn} of {tokenIn} to WETH. Cost USD: {cost_usd} Profit USD: {profit_usd}"
         )
         if profit_usd > cost_usd and cost_usd > 0:
@@ -1161,7 +1169,7 @@ def swap_tokens_to_another(tokenIn, tokenOut, amountIn):
                     account.address, flash.address
                 ).call()
                 if allowance < amountIn:
-                    print(
+                    logger.info(
                         f"Start approve Flash contract to spend {amountIn} of {tokenIn}"
                     )
                     tx_hash = token_contract.functions.approve(
@@ -1182,9 +1190,9 @@ def swap_tokens_to_another(tokenIn, tokenOut, amountIn):
                     cost_real_usd,
                     profit_usd,
                 ) = swap_cost_to_another_token(estimate_gas, maxAmountOut)
-                print(f"cost_real_usd: {cost_real_usd} profit_usd: {profit_usd}")
+
                 if profit_usd > cost_real_usd and cost_real_usd > 0:
-                    print(
+                    logger.info(
                         f"Start swap {amountIn} of {tokenIn} to at least {maxAmountOut} of {tokenOut}."
                     )
                     swap = flash.swap_tokens(
@@ -1206,7 +1214,7 @@ def swap_tokens_to_another(tokenIn, tokenOut, amountIn):
                             t_in_w = tokens_in_wallet(tokenOut, 0)
                             TOKENS_IN_WALLET_LIST.append(t_in_w)
             except Exception as e:
-                print("Error: ", e)
+                logger.exception("Error: ")
 
 
 def check_convertions():
@@ -1263,21 +1271,22 @@ def check_balance():
                 ether_amount_usd = round(
                     ether_amount * Decimal(get_token_price(config["token_weth"])), 2
                 )
-                print(f"Ether amount: {ether_amount} Ether USD: {ether_amount_usd}")
+                logger.debug(
+                    f"Ether amount: {ether_amount} Ether USD: {ether_amount_usd}"
+                )
 
-            print("Tokens in wallet:")
+            logger.debug("Tokens in wallet:")
             count = 0
             weth_current_amount = 0
             for tk in TOKENS_IN_WALLET_LIST:
                 if tk.amount > 0:
                     count += 1
                     value = round(get_token_amount_price(tk.token, tk.amount), 2)
-                    print(
+                    logger.debug(
                         f"{count} - Token: {tk.token} Amount: {tk.amount} USD: {value}"
                     )
-    except:
-        error = traceback.format_exc()
-        print(f"check_balance error: {error}")
+    except Exception as e:
+        logger.exception(f"check_balance error: {error}")
 
 
 def start_swap(
@@ -1313,20 +1322,19 @@ def start_swap(
         )
         swap_trx.wait(1)
         check_profitability(dex_pair_final_list)
-        print(f"Profit for pair {pairAddress} executed.")
+        logger.info(f"Profit for pair {pairAddress} executed.")
         if network.show_active() != "mainnet":
             if tokenOther not in TOKENS_IN_WALLET_LIST:
                 t_in_w = tokens_in_wallet(tokenOther, 0)
                 TOKENS_IN_WALLET_LIST.append(t_in_w)
 
     except Exception as e:
-        error = traceback.format_exc()
-        print("Error executing swap. Error: ", error)
+        logger.exception("Error executing swap. Error: ")
         # remove from list
         errors = config["list_errors_to_remove_pairs"].split(";")
         if error.find("eth_abi.exceptions.NonEmptyPaddingBytes") != -1:
             PAIRS_LIST_TO_REMOVE.append(dex_pair_final_list)
-            print(f"pair {pairAddress} added on the lis to be removed.")
+            logger.debug(f"pair {pairAddress} added on the lis to be removed.")
         else:
             for er in errors:
                 if error.find(er) != -1 or (
@@ -1335,7 +1343,9 @@ def start_swap(
                 ):
                     try:
                         PAIRS_LIST_TO_REMOVE.append(dex_pair_final_list)
-                        print(f"pair {pairAddress} added on the lis to be removed.")
+                        logger.debug(
+                            f"pair {pairAddress} added on the lis to be removed."
+                        )
                         break
                     except:
                         pass
@@ -1371,7 +1381,7 @@ def remove_pairs_with_errors(global_list, list_to_remove):
                 ):
                     global_list.remove(item_list)
                     list_removed.append(itens_list_to_rm)
-                    print("item removed from the list")
+                    logger.debug("item removed from the list")
                     break
 
         for itn in list_removed:
@@ -1382,9 +1392,8 @@ def remove_pairs_with_errors(global_list, list_to_remove):
                 ):
                     list_to_remove.remove(itens_list_to_rm)
                     break
-    except:
-        error = traceback.format_exc()
-        print("remove_pairs_with_errors error ", error)
+    except Exception as e:
+        logger.exception("remove_pairs_with_errors error ")
 
     return global_list, list_to_remove
 
@@ -1410,12 +1419,12 @@ def no_multithreads_sending_swaps():
 
             if len(list_most_traded_pairs) > 0:
                 start_time = datetime.now()
-                print(f"{start_time} - Start Executing Most Traded Pairs")
+                logger.debug(f"{start_time} - Start Executing Most Traded Pairs")
             for dex_pair_final_list in list_most_traded_pairs:
                 check_profitability(dex_pair_final_list)
             if len(list_most_traded_pairs) > 0:
                 end_time = datetime.now()
-                print(f"{end_time} - End Executing Most Traded Pairs")
+                logger.debug(f"{end_time} - End Executing Most Traded Pairs")
             # ---------------------------------
             if len(PAIRS_LIST_TO_REMOVE) > 0:
                 (
@@ -1437,9 +1446,8 @@ def no_multithreads_sending_swaps():
             if len(list_less_traded_pairs) > 0:
                 end_time = datetime.now()
                 print(f"{end_time} - End Executing Less Traded Pairs")
-        except:
-            error = traceback.format_exc()
-            print("Error: ", error)
+        except Exception as e:
+            print("Error: ")
 
 
 def fill_default_tokens():
@@ -1514,7 +1522,7 @@ def main3():
     test()
 
 
-def main1():
+def main2():
     print("Starting main!")
     pair0 = "0x6b0b819494a3b789439f32fb0097a625b16b5225"
     pair1 = "0x89fa2fd7dd529d70912b434269843389c5575822"
@@ -1621,6 +1629,14 @@ def main1():
     # profit, amountOut, result = watcher.validate(tokens, amounts, routers, {"from": account},)
     # print(f"profit: {profit} amountOut: {amountOut}")
     check_profitability(list_final)
+
+
+def main1():
+    logger.debug("debug message")
+    logger.info("info message")
+    logger.warning("warn message")
+    logger.error("error message")
+    logger.critical("critical message")
 
 
 def fill_global_variables():

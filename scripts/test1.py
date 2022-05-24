@@ -21,6 +21,17 @@ def renew_connection():
 
 
 def main():
+    import logging
+
+    logging.basicConfig(level=logging.DEBUG)
+    logging.debug("This is a debug message")
+    logging.info("This is an info message")
+    logging.warning("This is a warning message")
+    logging.error("This is an error message")
+    logging.critical("This is a critical message")
+
+
+def main0():
     # Make a request through the Tor connection
     # IP visible through Tor
     session = get_tor_session()

@@ -22,6 +22,24 @@ from datetime import date
 from datetime import datetime
 from datetime import timedelta
 from decimal import Decimal
+import logging
+
+# Create Logger
+logger = logging.getLogger("script")
+logger.setLevel(logging.DEBUG)
+# Create console handler and set level to debug
+fh = logging.FileHandler("flashswap.log")
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+fh.setLevel(logging.INFO)
+# create formatter
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+# add formatter to ch
+ch.setFormatter(formatter)
+fh.setFormatter(formatter)
+# add ch to logger
+logger.addHandler(ch)
+logger.addHandler(fh)
 
 REQUEST_SIZE = 1000
 FORKED_LOCAL_ENVIRONMENTS = ["mainnet-fork", "mainnet-fork-dev"]
@@ -48,10 +66,10 @@ def read_chainlink_data():
 
 
 def get_dex_data():
-    print("Starting get DEX data ...")
+    logger.info("Starting get DEX data ...")
     dexs = []
     for dex_name in config["dex"]:
-        print(f"Getting {dex_name} data ...")
+        logger.debug(f"Getting {dex_name} data ...")
         factory = config["dex"][dex_name]["factory"]
         router = config["dex"][dex_name]["router"]
         default_token = config["dex"][dex_name]["default_token"]
@@ -64,7 +82,7 @@ def get_dex_data():
         id = ""
         # pairs
         if use_graph:
-            print(f"Getting {dex_name} data from theGraph ...")
+            logger.info(f"Getting {dex_name} data from theGraph ...")
             while return_records == REQUEST_SIZE:
                 url = config["dex"][dex_name]["graph_url"]
                 query = config["dex"][dex_name]["graph_query"]
@@ -77,15 +95,15 @@ def get_dex_data():
                     return_records = len(pairs)
                     # to remove
                     total += return_records
-                    print(f"Getting Pairs from {dex_name}. Total: {total}")
+                    logger.debug(f"Getting Pairs from {dex_name}. Total: {total}")
                     # add pair to the list
                     for pair in pairs:
                         pair["dailyVolumeUSD"] = 0
                         dex_pairs.append(pair)
                     id = pairs[-1]["id"]
                 else:
-                    print(
-                        f"error request data to graph. dex: {dex_name} # url {url} # {query} # response: {my_dt}"
+                    logger.debug(
+                        f"error request data to graph. dex: {dex_name} retry ..."
                     )
                     time.sleep(2)
 
@@ -124,7 +142,7 @@ def get_dex_data():
 
 
 def pair_daily_Volume(dex_name, pairs):
-    print(f"Getting {dex_name} daily volume information ...")
+    logger.info(f"Getting {dex_name} daily volume information ...")
     date_time = date.today() - timedelta(days=1)
     unix_time = int(time.mktime(date_time.timetuple()))
     url = config["dex"][dex_name]["graph_url"]
@@ -149,7 +167,7 @@ def pair_daily_Volume(dex_name, pairs):
                 break
 
     total = len(dailyVolumeInfo)
-    print(f"{dex_name} total pairs traded in last 24h: {total}")
+    logger.info(f"{dex_name} total pairs traded in last 24h: {total}")
 
     for pair in pairs:
         volume = get_volume_info_data(dailyVolumeInfo, pair["id"])
@@ -264,7 +282,7 @@ def get_weth(ether_wei):
         }
     )
     tx.wait(1)
-    print("WETH Received.")
+    logger.info(f"WETH Received. Amount: {ether_wei}")
 
 
 def get_etherscan_weth_abi():
