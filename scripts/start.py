@@ -1507,6 +1507,7 @@ def test():
     DEFAULT_TOKENS_PRICES_LIST = myList_d
     check_balance()
     print("price: ", get_token_price("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"))
+    update_tokens_price()
 
 
 def main3():
